@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 
 {% block content %}
-  {% for match in matches %}
+  {% for match in match_lsts %}
     {% set matchnum = loop.index %}
     {% set matchidx = loop.index0 %}
     <div>
@@ -10,11 +10,16 @@
         {% set candidatenum = loop.index %}
         {% set candidateidx = loop.index0 %}
         <details>
-          <summary>{{ candidate.artist }} - {{ candidate.title }} ({{ tallies[matchidx][candidateidx] }})</summary>
-          {% if voters[matchidx][candidateidx]|length == 0 %}
+          <summary>
+            {{ candidate.song.artist }} - {{ candidate.song.title }} ({{ candidate.tally }})
+            {% if candidate.eliminated %}
+              [Eliminated: Nominated by {{ candidate.song.user.username }}]
+            {% endif %}
+          </summary>
+          {% if candidate.tally == 0 %}
             Absolutely no one.
           {% endif %}
-          {% for voter in voters[matchidx][candidateidx] %}
+          {% for voter in candidate.voters %}
             {{ voter }}{{", " if not loop.last}}
           {% endfor %}
         </details>

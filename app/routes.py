@@ -26,10 +26,13 @@ def get_active_rounds():
 
     matches_in_round = len(get_matches(round.event.event_slug, round.round_slug))
 
-    did_you_vote = get_votes_in_round(round.id)
-
-    did_you_start = len(did_you_vote) > 0
-    did_you_finish = len(did_you_vote) == matches_in_round
+    if current_user.is_authenticated:
+      did_you_vote = get_votes_in_round(current_user.id, round.id)
+      did_you_start = len(did_you_vote) > 0
+      did_you_finish = len(did_you_vote) == matches_in_round
+    else:
+      did_you_start = False
+      did_you_finish = False
 
     active_rounds.append({
       'name': f'{round.event.name} Round {round.round_slug}',
@@ -43,58 +46,109 @@ def get_active_rounds():
 
   return active_rounds
 
-# Get a list of the current user's votes for a specific round.
-def get_votes_in_round(round_id):
+
+##################
+# DATABASE UTILS #
+##################
+
+# Get a list of the specified user's Vote objects for a specific round.
+def get_votes_in_round(user_id, round_id):
   return db.session.scalars(sa.select(Vote, Match)
       .filter(Vote.match_id == Match.id) # table join
-      .filter(Vote.user_id == current_user.id) # find your votes
+      .filter(Vote.user_id == user_id) # find user's votes
       .filter(Match.round_id == round_id) # find votes in current round
     ).all()
 
-# Get the current user's vote for a specific match.
-def get_vote_in_match(match_id):
+# Get the specified user's Vote object for a specific match.
+def get_vote_in_match(user_id, match_id):
   return db.session.scalar(sa.select(Vote)
     .filter(Vote.match_id == match_id) # find the specific match
-    .filter(Vote.user_id == current_user.id) # find your vote
+    .filter(Vote.user_id == user_id) # find user's vote
   )
 
+# Get the specified Round object.
 def get_round(event_slug, round_slug):
-  round = db.one_or_404(sa.select(Round, Event).filter(Round.event_id == Event.id).filter(Round.round_slug == round_slug).filter(Event.event_slug == event_slug))
+  round = db.one_or_404(sa.select(Round, Event)
+    .filter(Round.event_id == Event.id) # table join
+    .filter(Round.round_slug == round_slug) # find specific round
+    .filter(Event.event_slug == event_slug) # in specific event
+    )
   return round
 
+# Get a list of all Match objects for a specific round.
+# Return value is ordered by Match ID.
 def get_matches(event_slug, round_slug):
-  round = db.one_or_404(sa.select(Round, Event).filter(Round.event_id == Event.id).filter(Round.round_slug == round_slug).filter(Event.event_slug == event_slug))
-  matches = db.session.scalars(round.matches.select().order_by(Match.id)).all()
+  round = db.one_or_404(sa.select(Round, Event)
+    .filter(Round.event_id == Event.id) # table join
+    .filter(Round.round_slug == round_slug) # find specific round
+    .filter(Event.event_slug == event_slug)) # in specific event
+  matches = db.session.scalars(round.matches.select()
+    .order_by(Match.id) # order by match ID
+  ).all()
   return matches
 
-def get_songs(match):
+# Get the Song objects for a specific match.
+# Return value is ordered by Song ID.
+def get_songs(match_id):
+  match = db.session.scalar(sa.select(Match).filter(Match.id == match_id)) # find the Match object
+  candidates = db.session.scalars(match.candidates.select().order_by(Candidate.song_id)).all() # find the Candidate objects
+
   songs = []
-  candidates = db.session.scalars(match.candidates.select().order_by(Candidate.song_id)).all()
   for candidate in candidates:
-    song = db.session.scalar(sa.select(Song).where(Song.id == candidate.song_id))
+    song = db.session.scalar(sa.select(Song).where(Song.id == candidate.song_id)) # match each Candidate to a Song
     songs.append(song)
   return songs
 
 def get_voter_username(vote):
   return db.session.scalar(sa.select(User).where(User.id == vote.user_id)).username
 
-def count_votes(event_slug, round_slug):
-  tallies = []
-  voters = []
+#################
+# VOTE COUNTING #
+#################
 
+def count_votes(event_slug, round_slug):
+  round = get_round(event_slug, round_slug)
+  dtnow = datetime.datetime.now()
+  round_over = dtnow > round.end_time
+
+  match_lsts = [] # ordered by match_id, thanks to the query in get_matches
   matches = get_matches(event_slug, round_slug)
 
   for match in matches:
-    tally = []
-    voter = []
-    for song_idx, song in enumerate(get_songs(match)):
-      votes = db.session.scalars(sa.select(Vote).where(Vote.match_id == match.id).where(Vote.song_id == song.id)).all()
-      tally.append(len(votes))
-      voter.append([get_voter_username(v) for v in votes])
-    tallies.append(tally)
-    voters.append(voter)
 
-  return tallies, voters
+    match_lst = [] # ordered by song_id, thanks to the query in get_songs
+
+    for song_idx, song in enumerate(get_songs(match.id)):
+
+      song_dict = {'song': song, 'tally': 0, 'voters': [], 'eliminated' : False}
+
+      votes = db.session.scalars(sa.select(Vote)
+        .where(Vote.match_id == match.id) # all votes for current match
+        .where(Vote.song_id == song.id) # that voted for current song
+      ).all()
+
+      for vote in votes:
+
+        # only log votes if you finished voting
+        # doing this in a triple-nested loop is crazy slow.
+        # I should work out how to speed it up.
+        did_you_vote = get_votes_in_round(vote.user_id, round.id)
+        did_you_finish = len(did_you_vote) == len(matches)
+
+        if did_you_finish:
+          song_dict['voters'].append(get_voter_username(vote))
+          song_dict['tally'] += 1
+
+      match_lst.append(song_dict)
+    
+    match_lsts.append(match_lst)
+
+    # eliminate the loser of this match
+    if round_over:
+      min_song = min(match_lst, key=lambda x : x['tally'])
+      min_song['eliminated'] = True
+
+  return match_lsts
 
 def add_vote(submission):
   user_id = current_user.id
@@ -107,10 +161,13 @@ def add_vote(submission):
       db.session.merge(vote)
   db.session.commit()
 
+
+##########
+# ROUTES #
+##########
+
 @app.route('/')
 def index():
-  round = get_round('su26-music', '1A') # temp
-
   if current_user.is_authenticated:
     un = f'You are: {current_user.username}'
   else:
@@ -142,8 +199,6 @@ def logout():
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
-  round = get_round('su26-music', '1A') # temp
-
   if current_user.is_authenticated:
     return redirect(url_for('index'))
   form = RegistrationForm()
@@ -171,7 +226,7 @@ def vote(event_slug, round_slug):
     radio_choices = []
 
     candidates = db.session.scalars(match.candidates.select().order_by(Candidate.song_id)).all()
-    current_vote = get_vote_in_match(match.id)
+    current_vote = get_vote_in_match(current_user.id, match.id)
     current_vote_name = f'match{match.id}-{current_vote.song_id}'
 
     for candidate_idx, candidate in enumerate(candidates):
@@ -197,12 +252,5 @@ def vote(event_slug, round_slug):
 
 @app.route('/results/<event_slug>/<round_slug>')
 def results(event_slug, round_slug):
-  round = get_round(event_slug, round_slug)
-  matches_db = get_matches(event_slug, round_slug)
-  matches = []
-
-  for match in matches_db:
-    matches.append(get_songs(match))
-
-  tallies, voters = count_votes(event_slug, round_slug)
-  return render_template('results.html', title='Results', active_rounds=get_active_rounds(), matches=matches, tallies=tallies, voters=voters)
+  match_lsts = count_votes(event_slug, round_slug)
+  return render_template('results.html', title='Results', active_rounds=get_active_rounds(), match_lsts=match_lsts)

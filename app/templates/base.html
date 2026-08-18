@@ -6,16 +6,13 @@
   <body>
     <div>
       NHC Music Showdown:
-      <a href="{{ url_for('index') }}">Index</a>
-      <a href="{{ url_for('vote', event_slug='su26-music', round_slug='1A') }}">Vote</a>
-      <a href="{{ url_for('results', event_slug='su26-music', round_slug='1A') }}">Results</a>
+      <a href="{{ url_for('index') }}">Home</a>
       {% if current_user.is_anonymous %}
-        <a href="{{ url_for('login') }}">Login</a>
+        / <a href="{{ url_for('login') }}">Login</a>
       {% else %}
-        <a href="{{ url_for('logout') }}">Logout</a>
+        / <a href="{{ url_for('logout') }}">Logout</a>
       {% endif %}
     </div>
-    <hr>
 
     {% with messages = get_flashed_messages() %}
       {% if messages %}
@@ -47,12 +44,12 @@
         
       // Output the result in an element with id="demo"
       document.getElementById(slug).innerHTML = days + "d " + hours + "h "
-      + minutes + "m " + seconds + "s ";
+      + minutes + "m " + seconds + "s remaining";
         
       // If the count down is over, write some text 
       if (distance < 0) {
-        clearInterval(x);
-        document.getElementById(slug).innerHTML = "EXPIRED";
+        //clearInterval(x);
+        document.getElementById(slug).innerHTML = 'Round over. <a href="javascript:window.location.reload(true)">Refresh the page</a> to see results.';
       }
     }
 
@@ -73,16 +70,20 @@
     <ul>
       {% for round in active_rounds %}
         <li>
-          {{ round.name }}: <b><div id="{{ round.slug }}" style="display: inline"></div></b> remaining
+          {{ round.name }}: <b><div id="{{ round.slug }}" style="display: inline"></div></b>
 
           [<a href="{{ url_for('vote', event_slug=round.event_slug, round_slug=round.round_slug) }}">submit votes</a> / <a href="{{ url_for('results', event_slug=round.event_slug, round_slug=round.round_slug) }}">see results</a>]
 
-          {% if round.did_you_finish %}
-            <div style="display: inline; color: green">[You finished voting.]</div>
-          {% elif round.did_you_start %}
-            <div style="display: inline; color: orange">[Your votes are half-finished.]</div>
+          {% if current_user.is_authenticated %}
+            {% if round.did_you_finish %}
+              <div style="display: inline; color: green">[You finished voting.]</div>
+            {% elif round.did_you_start %}
+              <div style="display: inline; color: orange">[Your votes are half-finished.]</div>
+            {% else %}
+              <div style="display: inline; color: red">[You didn't vote yet. SMH.]</div>
+            {% endif %}
           {% else %}
-            <div style="display: inline; color: red">[You didn't vote yet. SMH.]</div>
+            <div style="display: inline; color: gray">[<a href="{{ url_for('login') }}">Log in</a> to check if you voted.]</div>
           {% endif %}
 
           <script>setCountDown("{{ round.slug }}", "{{ round.end_time }}")</script>
@@ -90,6 +91,8 @@
       {% endfor %}
     </ul>
     <br>
+
+    <hr>
 
     <h1>{{ title }}</h1>
 
