@@ -20,7 +20,7 @@ import re
 # By default, get any rounds that ended in the last 48 hours.
 def get_recent_rounds(delta = timedelta(hours=48)):
   threshold = datetime.now() - delta
-  rounds = db.session.scalars(sa.select(Round).filter(threshold < Round.end_time)).all()
+  rounds = db.session.scalars(sa.select(Round).filter(threshold < Round.end_time).filter(Round.end_time < datetime.now())).all()
 
   recent_rounds = []
   for round in rounds:
@@ -208,9 +208,9 @@ def add_vote(submission):
   db.session.commit()
 
 
-##########
-# ROUTES #
-##########
+###############
+# AUTH ROUTES #
+###############
 
 @app.route('/')
 def index():
@@ -257,6 +257,11 @@ def register():
     return redirect(url_for('login'))
   return render_template('register.html', title='Register', form=form, active_rounds=get_active_rounds(), recent_rounds=get_recent_rounds())
 
+
+###############
+# VOTE ROUTES #
+###############
+
 @app.route('/vote/<event_slug>/<round_slug>', methods=['GET', 'POST'])
 @login_required
 def vote(event_slug, round_slug):
@@ -269,6 +274,7 @@ def vote(event_slug, round_slug):
 
   did_you_vote = get_votes_in_round(current_user.id, round.id)
   did_you_start = len(did_you_vote) > 0
+  did_you_finish = len(did_you_vote) == len(matches)
 
   # if round_over:
   # - if we need tiebreaks, and you didn't start, you can be the tiebreaker
@@ -314,10 +320,22 @@ def vote(event_slug, round_slug):
       return redirect(url_for('results', event_slug=event_slug, round_slug=round_slug))
     else:
       add_vote(request.form)
-      flash('Vote received. While you wait, why not check out the results so far?')
-      return redirect(url_for('results', event_slug=event_slug, round_slug=round_slug))
+
+      did_you_vote = get_votes_in_round(current_user.id, round.id)
+      did_you_start = len(did_you_vote) > 0
+      did_you_finish = len(did_you_vote) == len(matches)
+
+      if did_you_finish:
+        flash('Vote received. While you wait, why not check out the results so far?')
+        return redirect(url_for('results', event_slug=event_slug, round_slug=round_slug))
+      elif did_you_start:
+        flash('Your votes so far are saved, but you haven\'t voted in every match yet.')
+        return redirect(url_for('vote', event_slug=event_slug, round_slug=round_slug))
+      else:
+        return redirect(url_for('vote', event_slug=event_slug, round_slug=round_slug))
   else:
-    return render_template('vote.html', title='Vote', active_rounds=get_active_rounds(), recent_rounds=get_recent_rounds(), matches=matches, form=form)
+    return render_template('vote.html', title='Vote', active_rounds=get_active_rounds(), recent_rounds=get_recent_rounds(),
+      form=form, did_you_start=did_you_start, did_you_finish=did_you_finish)
 
 
 @app.route('/results/<event_slug>/<round_slug>')

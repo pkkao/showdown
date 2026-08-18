@@ -65,6 +65,10 @@ class Match(db.Model):
   id: so.Mapped[int] = so.mapped_column(primary_key=True)
   round_id: so.Mapped[int] = so.mapped_column(sa.ForeignKey(Round.id), index=True)
 
+  # add a field that says which match the winner advances to
+  # add a boolean field so that the "advance" logic only plays out once at the launch of each round
+  # "advance" logic = make a new candidate with song_id=song_id but match_id=next_match_id. oh that might be clean
+
   round: so.Mapped['Round'] = so.relationship(back_populates='matches')
   votes: so.WriteOnlyMapped['Vote'] = so.relationship(back_populates='match')
   candidates: so.WriteOnlyMapped['Candidate'] = so.relationship(back_populates='match')
