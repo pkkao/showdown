@@ -13,7 +13,10 @@
           <summary>
             {{ candidate.song.artist }} - {{ candidate.song.title }} ({{ candidate.tally }})
             {% if candidate.eliminated %}
-              [Eliminated: Nominated by {{ candidate.song.user.username }}]
+              <b>[Eliminated: Nominated by {{ candidate.song.user.username }}]</b>
+            {% endif %}
+            {% if candidate.needs_tiebreaker %}
+              <b>[Needs Tiebreaker]</b>
             {% endif %}
           </summary>
           {% if candidate.tally == 0 %}

@@ -12,13 +12,42 @@ from app import db
 from app.models import User, Event, Round, Song, Match, Vote, Candidate
 from app.forms import LoginForm, RegistrationForm
 
-import datetime
+from datetime import datetime, timedelta
 import pytz
 from urllib.parse import urlsplit
 import re
 
+# By default, get any rounds that ended in the last 48 hours.
+def get_recent_rounds(delta = timedelta(hours=48)):
+  threshold = datetime.now() - delta
+  rounds = db.session.scalars(sa.select(Round).filter(threshold < Round.end_time)).all()
+
+  recent_rounds = []
+  for round in rounds:
+
+    # Oops, crazy slow again.
+    tiebreaks = needs_tiebreaker(count_votes(round.event.event_slug, round.round_slug))
+
+    if current_user.is_authenticated:
+      did_you_vote = get_votes_in_round(current_user.id, round.id)
+      did_you_start = len(did_you_vote) > 0
+    else:
+      did_you_start = False
+
+    recent_rounds.append({
+      'name': f'{round.event.name} Round {round.round_slug}',
+      'round_slug': round.round_slug,
+      'event_slug': round.event.event_slug,
+      'slug': f'{round.event.event_slug}-{round.round_slug}',
+      'needs_tiebreaker': len(tiebreaks) > 0,
+      'tiebreaks': tiebreaks,
+      'did_you_start': did_you_start
+    })
+
+  return recent_rounds
+
 def get_active_rounds():
-  dtnow = datetime.datetime.now()
+  dtnow = datetime.now()
   rounds = db.session.scalars(sa.select(Round).filter(Round.start_time < dtnow).filter(dtnow < Round.end_time)).all()
 
   active_rounds = []
@@ -45,7 +74,6 @@ def get_active_rounds():
     })
 
   return active_rounds
-
 
 ##################
 # DATABASE UTILS #
@@ -108,7 +136,7 @@ def get_voter_username(vote):
 
 def count_votes(event_slug, round_slug):
   round = get_round(event_slug, round_slug)
-  dtnow = datetime.datetime.now()
+  dtnow = datetime.now()
   round_over = dtnow > round.end_time
 
   match_lsts = [] # ordered by match_id, thanks to the query in get_matches
@@ -120,7 +148,7 @@ def count_votes(event_slug, round_slug):
 
     for song_idx, song in enumerate(get_songs(match.id)):
 
-      song_dict = {'song': song, 'tally': 0, 'voters': [], 'eliminated' : False}
+      song_dict = {'song': song, 'tally': 0, 'voters': [], 'eliminated' : False, 'needs_tiebreaker': False}
 
       votes = db.session.scalars(sa.select(Vote)
         .where(Vote.match_id == match.id) # all votes for current match
@@ -146,9 +174,27 @@ def count_votes(event_slug, round_slug):
     # eliminate the loser of this match
     if round_over:
       min_song = min(match_lst, key=lambda x : x['tally'])
-      min_song['eliminated'] = True
+      no_ties = sum(song['tally'] == min_song['tally'] for song in match_lst) == 1
+      if no_ties:
+        min_song['eliminated'] = True
+      else:
+        for song_dict in match_lst:
+          if song_dict['tally'] == min_song['tally']:
+            song_dict['needs_tiebreaker'] = True
 
   return match_lsts
+
+# Returns a sorted list of match numbers that need tiebreaker.
+# This requires match_lsts which is crazy slow.
+# I should work out how to speed it up.
+def needs_tiebreaker(match_lsts):
+  tied_matches = set() # match nums
+  for match_idx, match_lst in enumerate(match_lsts):
+    match_num = match_idx + 1
+    for song_dict in match_lst:
+      if song_dict['needs_tiebreaker']:
+        tied_matches.add(match_num)
+  return sorted(list(tied_matches))
 
 def add_vote(submission):
   user_id = current_user.id
@@ -172,7 +218,7 @@ def index():
     un = f'You are: {current_user.username}'
   else:
     un = 'You are: Anonymous'
-  return render_template('debug.html', debug=un, active_rounds=get_active_rounds())
+  return render_template('debug.html', debug=un, active_rounds=get_active_rounds(), recent_rounds=get_recent_rounds())
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -190,7 +236,7 @@ def login():
     if not next_page or urlsplit(next_page).netloc != '':
       next_page = url_for('index')
     return redirect(next_page)
-  return render_template('login.html', title='Sign In', form=form, active_rounds=get_active_rounds())
+  return render_template('login.html', title='Sign In', form=form, active_rounds=get_active_rounds(), recent_rounds=get_recent_rounds())
 
 @app.route('/logout')
 def logout():
@@ -209,7 +255,7 @@ def register():
     db.session.commit()
     flash(f'Registered as {user.username}')
     return redirect(url_for('login'))
-  return render_template('register.html', title='Register', form=form, active_rounds=get_active_rounds())
+  return render_template('register.html', title='Register', form=form, active_rounds=get_active_rounds(), recent_rounds=get_recent_rounds())
 
 @app.route('/vote/<event_slug>/<round_slug>', methods=['GET', 'POST'])
 @login_required
@@ -217,6 +263,22 @@ def vote(event_slug, round_slug):
 
   round = get_round(event_slug, round_slug)
   matches = get_matches(event_slug, round_slug)
+
+  dtnow = datetime.now()
+  round_over = dtnow > round.end_time
+
+  did_you_vote = get_votes_in_round(current_user.id, round.id)
+  did_you_start = len(did_you_vote) > 0
+
+  # if round_over:
+  # - if we need tiebreaks, and you didn't start, you can be the tiebreaker
+  # - any other case (no tiebreaks needed, or tiebreaks needed but you started/voted), get blocked
+  # did_you_start here gatekeeps tiebreakers to people who haven't started to vote yet
+  # if we dislike this, change it I guess
+  tiebreaks = needs_tiebreaker(count_votes(event_slug, round_slug))
+  if round_over and (len(tiebreaks) == 0 or did_you_start):
+    flash('Voting for this round is closed. See the results:')
+    return redirect(url_for('results', event_slug=event_slug, round_slug=round_slug))
 
   class VoteForm(FlaskForm):
     pass
@@ -227,7 +289,10 @@ def vote(event_slug, round_slug):
 
     candidates = db.session.scalars(match.candidates.select().order_by(Candidate.song_id)).all()
     current_vote = get_vote_in_match(current_user.id, match.id)
-    current_vote_name = f'match{match.id}-{current_vote.song_id}'
+    if current_vote:
+      current_vote_name = f'match{match.id}-{current_vote.song_id}'
+    else:
+      current_vote_name = None
 
     for candidate_idx, candidate in enumerate(candidates):
 
@@ -243,14 +308,19 @@ def vote(event_slug, round_slug):
   form = VoteForm()
 
   if form.validate_on_submit():
-    flash('Vote received. While you wait, why not check out the results so far?')
-    add_vote(request.form)
-    return redirect(url_for('results', event_slug=event_slug, round_slug=round_slug))
+    # same janky tiebreak logic as above
+    if round_over and (len(tiebreaks) == 0 or did_you_start):
+      flash('Voting for this round is closed. See the results:')
+      return redirect(url_for('results', event_slug=event_slug, round_slug=round_slug))
+    else:
+      add_vote(request.form)
+      flash('Vote received. While you wait, why not check out the results so far?')
+      return redirect(url_for('results', event_slug=event_slug, round_slug=round_slug))
   else:
-    return render_template('vote.html', title='Vote', active_rounds=get_active_rounds(), matches=matches, form=form)
+    return render_template('vote.html', title='Vote', active_rounds=get_active_rounds(), recent_rounds=get_recent_rounds(), matches=matches, form=form)
 
 
 @app.route('/results/<event_slug>/<round_slug>')
 def results(event_slug, round_slug):
   match_lsts = count_votes(event_slug, round_slug)
-  return render_template('results.html', title='Results', active_rounds=get_active_rounds(), match_lsts=match_lsts)
+  return render_template('results.html', title='Results', active_rounds=get_active_rounds(), recent_rounds=get_recent_rounds(), match_lsts=match_lsts)

@@ -91,6 +91,27 @@
       {% endfor %}
     </ul>
     <br>
+    
+    Recently-finished rounds:
+    <ul>
+      {% for round in recent_rounds %}
+        <li>
+          {{ round.name }}
+
+          {% if current_user.is_authenticated and round.needs_tiebreaker and not round.did_you_start %}
+            [<a href="{{ url_for('vote', event_slug=round.event_slug, round_slug=round.round_slug) }}">submit votes</a> / <a href="{{ url_for('results', event_slug=round.event_slug, round_slug=round.round_slug) }}">see results</a>]
+          {% else %}
+            [<a href="{{ url_for('results', event_slug=round.event_slug, round_slug=round.round_slug) }}">see results</a>]
+          {% endif %}
+
+          
+
+          {% if round.needs_tiebreaker %}
+            <b>[Needs tiebreaker for matches {{ round.tiebreaks }}]</b>
+          {% endif %}
+        </li>
+      {% endfor %}
+    </ul>
 
     <hr>
 
