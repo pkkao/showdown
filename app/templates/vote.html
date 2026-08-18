@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+  <form action="" method="POST" novalidate>
+    {{ form.hidden_tag() }}
+    
+    {% for field in form %}
+        {% if field.type == "RadioField" %}
+          {{ field.label }}{{ field }}
+        {% endif %}
+    {% endfor %}
+
+    {{ form.submit() }}
+  </form>
+
+  {#
+  old:
+  <form action="" method="POST">
+    <p>Do some voting:</p>
+
+    {% for match in matches %}
+      {% set matchnum = loop.index %}
+      {% set matchidx = loop.index0 %}
+      <div>
+        <p>Match {{ matchnum }}:</p>
+
+        {% for candidate in match %}
+          {% set candidatenum = loop.index %}
+          {% set candidateidx = loop.index0 %}
+          <input type="radio" id="match{{ matchnum }}-{{ candidatenum }}" name="{{ matchidx }}" value="{{ candidateidx }}">
+          <label for="match{{ matchnum }}-{{ candidatenum }}">{{ candidate.artist }} - {{ candidate.title }}</label>
+          <br>
+        {% endfor %}
+      </div>
+    {% endfor %}
+    <br>
+    <input type='submit' value='Submit'>
+  </form>
+  #}
+{% endblock %}

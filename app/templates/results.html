@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+
+{% block content %}
+  {% for match in matches %}
+    {% set matchnum = loop.index %}
+    {% set matchidx = loop.index0 %}
+    <div>
+      <p>Match {{ matchnum }}:</p>
+      {% for candidate in match %}
+        {% set candidatenum = loop.index %}
+        {% set candidateidx = loop.index0 %}
+        <details>
+          <summary>{{ candidate.artist }} - {{ candidate.title }} ({{ tallies[matchidx][candidateidx] }})</summary>
+          {% if voters[matchidx][candidateidx]|length == 0 %}
+            Absolutely no one.
+          {% endif %}
+          {% for voter in voters[matchidx][candidateidx] %}
+            {{ voter }}{{", " if not loop.last}}
+          {% endfor %}
+        </details>
+      {% endfor %}
+      <br>
+    </div>
+  {% endfor %}
+{% endblock %}
