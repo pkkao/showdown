@@ -28,12 +28,8 @@ def get_recent_rounds(delta = timedelta(hours=48)):
     # Oops, crazy slow again.
     tiebreaks = needs_tiebreaker(count_votes(round.event.event_slug, round.round_slug))
 
-    matches_in_round = len(get_matches(round.event.event_slug, round.round_slug))
-
     if current_user.is_authenticated:
-      did_you_vote = get_votes_in_round(current_user.id, round.id)
-      did_you_start = len(did_you_vote) > 0
-      did_you_finish = len(did_you_vote) == matches_in_round
+      did_you_start, did_you_finish = did_you_vote(current_user.id, round.event.event_slug, round.round_slug)
     else:
       did_you_start = False
       did_you_finish = False
@@ -58,12 +54,8 @@ def get_active_rounds():
   active_rounds = []
   for round in rounds:
 
-    matches_in_round = len(get_matches(round.event.event_slug, round.round_slug))
-
     if current_user.is_authenticated:
-      did_you_vote = get_votes_in_round(current_user.id, round.id)
-      did_you_start = len(did_you_vote) > 0
-      did_you_finish = len(did_you_vote) == matches_in_round
+      did_you_start, did_you_finish = did_you_vote(current_user.id, round.event.event_slug, round.round_slug)
     else:
       did_you_start = False
       did_you_finish = False
@@ -151,6 +143,48 @@ def get_voter_username(vote):
 # VOTE COUNTING #
 #################
 
+# Returns whether the user started voting in the round,
+# and whether the user finished voting in the round.
+def did_you_vote(user_id, event_slug, round_slug):
+  round = get_round(event_slug, round_slug)
+  matches = get_matches(event_slug, round_slug)
+  your_votes_in_round = get_votes_in_round(user_id, round.id)
+  did_you_start = len(your_votes_in_round) > 0
+  did_you_finish = len(your_votes_in_round) == len(matches)
+  return did_you_start, did_you_finish
+
+# Given a match, return a list of dicts.
+# Each dicts has info about who voted for that song.
+def get_song_dicts(match_id):
+  match = get_match(match_id)
+  matches = get_matches(match.round.event.event_slug, match.round.round_slug)
+
+  match_lst = [] # ordered by song_id, thanks to the query in get_songs
+
+  for song_idx, song in enumerate(get_songs(match_id)):
+
+    song_dict = {'song': song, 'tally': 0, 'voters': [], 'eliminated' : False, 'needs_tiebreaker': False}
+
+    votes = get_votes_for_song_in_match(song.id, match_id)
+
+    for vote in votes:
+
+      # only log votes if you finished voting
+      # or if you are tiebreaker
+      # doing this in a triple-nested loop is crazy slow.
+      # I should work out how to speed it up.
+      did_you_vote = get_votes_in_round(vote.user_id, match.round.id)
+      did_you_finish = len(did_you_vote) == len(matches)
+
+      if did_you_finish or vote.is_tiebreaker:
+        song_dict['voters'].append(get_voter_username(vote))
+        song_dict['tally'] += 1
+
+    match_lst.append(song_dict)
+
+  return match_lst
+
+
 def count_votes(event_slug, round_slug):
   round = get_round(event_slug, round_slug)
   dtnow = datetime.now()
@@ -161,29 +195,7 @@ def count_votes(event_slug, round_slug):
 
   for match in matches:
 
-    match_lst = [] # ordered by song_id, thanks to the query in get_songs
-
-    for song_idx, song in enumerate(get_songs(match.id)):
-
-      song_dict = {'song': song, 'tally': 0, 'voters': [], 'eliminated' : False, 'needs_tiebreaker': False}
-
-      votes = get_votes_for_song_in_match(song.id, match.id)
-
-      for vote in votes:
-
-        # only log votes if you finished voting
-        # or if you are tiebreaker
-        # doing this in a triple-nested loop is crazy slow.
-        # I should work out how to speed it up.
-        did_you_vote = get_votes_in_round(vote.user_id, round.id)
-        did_you_finish = len(did_you_vote) == len(matches)
-
-        if did_you_finish or vote.is_tiebreaker:
-          song_dict['voters'].append(get_voter_username(vote))
-          song_dict['tally'] += 1
-
-      match_lst.append(song_dict)
-    
+    match_lst = get_song_dicts(match.id)
     match_lsts.append(match_lst)
 
     # eliminate the loser of this match
@@ -229,7 +241,6 @@ def add_vote(submission, is_tiebreaker):
 # Returns Song object for the highest vote-getter in the match.
 def get_winning_song(match_id):
   match = get_match(match_id)
-  match_lst = []
 
   # used later to check for complete votes only
   matches = get_matches(match.round.event.event_slug, match.round.round_slug)
@@ -237,25 +248,7 @@ def get_winning_song(match_id):
   # used later to check for tiebreaker votes
   round_over = datetime.now() > get_round(match.round.event.event_slug, match.round.round_slug).end_time
 
-  for song_idx, song in enumerate(get_songs(match.id)):
-
-    song_dict = {'song': song, 'tally': 0}
-
-    votes = get_votes_for_song_in_match(song.id, match.id)
-
-    for vote in votes:
-
-      # only log votes if you finished voting
-      # or if you are tiebreaker
-      # doing this in a triple-nested loop is crazy slow.
-      # I should work out how to speed it up.
-      did_you_vote = get_votes_in_round(vote.user_id, match.round.id)
-      did_you_finish = len(did_you_vote) == len(matches)
-
-      if did_you_finish or vote.is_tiebreaker:
-        song_dict['tally'] += 1
-
-    match_lst.append(song_dict)
+  match_lst = get_song_dicts(match_id)
 
   # find the winner of this match
   dtnow = datetime.now()
@@ -402,9 +395,7 @@ def vote(event_slug, round_slug):
   dtnow = datetime.now()
   round_over = dtnow > round.end_time
 
-  did_you_vote = get_votes_in_round(current_user.id, round.id)
-  did_you_start = len(did_you_vote) > 0
-  did_you_finish = len(did_you_vote) == len(matches)
+  did_you_start, did_you_finish = did_you_vote(current_user.id, event_slug, round_slug)
 
   # if round_over:
   # - if we need tiebreaks, and you didn't start, then you can be the tiebreaker
@@ -462,9 +453,7 @@ def vote(event_slug, round_slug):
       # if round is over, you are a tiebreaker, I think?
       add_vote(request.form, round_over)
 
-      did_you_vote = get_votes_in_round(current_user.id, round.id)
-      did_you_start = len(did_you_vote) > 0
-      did_you_finish = len(did_you_vote) == len(matches)
+      did_you_start, did_you_finish = did_you_vote(current_user.id, event_slug, round_slug)
 
       if round_over:
         flash('Tiebreaking vote(s) received. Check out the results:')
