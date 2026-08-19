@@ -94,6 +94,14 @@ def get_vote_in_match(user_id, match_id):
     .filter(Vote.user_id == user_id) # find user's vote
   )
 
+# Get a list of Vote objects that voted for a specific song in a specific match.
+def get_votes_for_song_in_match(song_id, match_id):
+  votes = db.session.scalars(sa.select(Vote)
+        .where(Vote.match_id == match_id) # all votes for current match
+        .where(Vote.song_id == song_id) # that voted for current song
+      ).all()
+  return votes
+
 # Get the specified Round object.
 def get_round(event_slug, round_slug):
   round = db.one_or_404(sa.select(Round, Event)
@@ -127,6 +135,10 @@ def get_songs(match_id):
     songs.append(song)
   return songs
 
+def get_match(match_id):
+  match = db.session.scalar(sa.select(Match).filter(Match.id == match_id)) # find the Match object
+  return match
+
 def get_voter_username(vote):
   return db.session.scalar(sa.select(User).where(User.id == vote.user_id)).username
 
@@ -150,10 +162,7 @@ def count_votes(event_slug, round_slug):
 
       song_dict = {'song': song, 'tally': 0, 'voters': [], 'eliminated' : False, 'needs_tiebreaker': False}
 
-      votes = db.session.scalars(sa.select(Vote)
-        .where(Vote.match_id == match.id) # all votes for current match
-        .where(Vote.song_id == song.id) # that voted for current song
-      ).all()
+      votes = get_votes_for_song_in_match(song.id, match.id)
 
       for vote in votes:
 
@@ -205,6 +214,90 @@ def add_vote(submission):
       song_id = int(re.search(r".*-(.*)", song).group(1))
       vote = Vote(match_id=match_id, user_id=user_id, song_id=song_id)
       db.session.merge(vote)
+  db.session.commit()
+
+####################
+# ADVANCING ROUNDS #
+####################
+
+# Returns Song object for the highest vote-getter in the match.
+def get_winning_song(match_id):
+  match = get_match(match_id)
+  match_lst = []
+
+  # used later to check for complete votes only
+  matches = get_matches(match.round.event.event_slug, match.round.round_slug)
+
+  for song_idx, song in enumerate(get_songs(match.id)):
+
+    song_dict = {'song': song, 'tally': 0}
+
+    votes = get_votes_for_song_in_match(song.id, match.id)
+
+    for vote in votes:
+
+      # only log votes if you finished voting
+      # doing this in a triple-nested loop is crazy slow.
+      # I should work out how to speed it up.
+      did_you_vote = get_votes_in_round(vote.user_id, match.round.id)
+      did_you_finish = len(did_you_vote) == len(matches)
+
+      if did_you_finish:
+        song_dict['tally'] += 1
+
+    match_lst.append(song_dict)
+
+  # find the winner of this match
+  dtnow = datetime.now()
+  round_over = dtnow > match.round.end_time
+  if round_over:
+    max_song = max(match_lst, key=lambda x : x['tally'])
+    no_ties = sum(song['tally'] == max_song['tally'] for song in match_lst) == 1
+    if no_ties:
+      return max_song['song']
+
+# Attempts to populate matches in the round that has been requested.
+# Checks exist so that this hopefully only happens once per round.
+def populate_round(event_slug, round_slug):
+
+  # Matches for the current round we are trying to populate.
+  matches = get_matches(event_slug, round_slug)
+
+  # If any current match has candidates already, do nothing.
+  for match in matches:
+    songs_in_match = get_songs(match.id)
+    if len(songs_in_match) > 0:
+      return
+
+  # Fetch all the previous rounds that the current round depends on.
+  # Each previous round is a (event_slug, round_slug) tuple.
+  prev_rounds = set()
+  for match in matches:
+    for prev_match in match.prev_matches:
+      prev_round = prev_match.round
+      prev_rounds.add((prev_round.event.event_slug, prev_round.round_slug))
+
+  # If any previous round needs a tiebreaker, do nothing.
+  for event_slug, round_slug in prev_rounds:
+    match_lsts = count_votes(event_slug, round_slug)
+    if needs_tiebreaker(match_lsts):
+      return
+
+  # Attempt to populate each match with one winner from each of its previous matches.
+  for new_match in matches:
+    for prev_match in new_match.prev_matches:
+
+      new_song_id = get_winning_song(prev_match.id).id
+      new_match_id = new_match.id
+
+      # If we fail to get a unique winning song, quit.
+      # In theory checking for tiebreakers should have taken care of this, but IDK.
+      if new_song_id is None:
+        return
+
+      new_candidate = Candidate(song_id=new_song_id, match_id=new_match_id)
+      db.session.add(new_candidate)
+
   db.session.commit()
 
 
@@ -265,6 +358,9 @@ def register():
 @app.route('/vote/<event_slug>/<round_slug>', methods=['GET', 'POST'])
 @login_required
 def vote(event_slug, round_slug):
+
+  # In theory, this only does something the first time the user requests a round.
+  populate_round(event_slug, round_slug)
 
   round = get_round(event_slug, round_slug)
   matches = get_matches(event_slug, round_slug)
