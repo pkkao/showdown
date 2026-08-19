@@ -2,7 +2,9 @@
 
 {% block content %}
 
-  {% if did_you_finish %}
+  {% if round_over %}
+    <p>You can cast tiebreaking votes in the matches below. Be careful–as soon as you submit, the round instantly ends and you cannot edit your tiebreak votes.</p>
+  {% elif did_you_finish %}
     <p>Your votes are submitted and counted, but you can still edit your votes until the deadline.</p>
   {% elif did_you_start %}
     <p>You started voting, but did not finish. Your votes won't count until you vote in every match.</p>
@@ -10,12 +12,19 @@
     <p>You have not started voting yet.</p>
   {% endif %}
 
+  {% if round_over %}
+  <form action="" method="POST" onsubmit="return confirm('Are you sure? This will immediately end the round, and you cannot edit your tiebreak votes.')" novalidate>
+  {% else %}
   <form action="" method="POST" novalidate>
+  {% endif %}
     {{ form.hidden_tag() }}
     
     {% for field in form %}
         {% if field.type == "RadioField" %}
           {{ field.label }}{{ field }}
+          {% for error in field.errors %}
+            <span style="color: red;">[{{ error }}]</span><br><br>
+          {% endfor %}
         {% endif %}
     {% endfor %}
 

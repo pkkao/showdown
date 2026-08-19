@@ -88,7 +88,7 @@
             {% elif round.did_you_start %}
               <div style="display: inline; color: orange">[Your votes are half-finished.]</div>
             {% else %}
-              <div style="display: inline; color: red">[You didn't vote yet. SMH.]</div>
+              <div style="display: inline; color: red">[You didn't vote yet.]</div>
             {% endif %}
           {% else %}
             <div style="display: inline; color: gray">[<a href="{{ url_for('login') }}">Log in</a> to check if you voted.]</div>

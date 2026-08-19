@@ -84,6 +84,7 @@ class Vote(db.Model):
   match_id: so.Mapped[int] = so.mapped_column(sa.ForeignKey(Match.id), index=True, primary_key=True)
   user_id: so.Mapped[int] = so.mapped_column(sa.ForeignKey(User.id), index=True, primary_key=True)
   song_id: so.Mapped[int] = so.mapped_column(sa.ForeignKey(Song.id), index=True)
+  is_tiebreaker: so.Mapped[bool] = so.mapped_column(default=False)
 
   sa.UniqueConstraint(match_id, user_id, name='vote once per match')
 

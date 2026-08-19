@@ -3,7 +3,7 @@ from app import app
 
 from flask_wtf import FlaskForm
 from wtforms import RadioField, SubmitField
-from wtforms.validators import Optional
+from wtforms.validators import Optional, DataRequired
 
 from flask_login import current_user, login_user, login_required, logout_user
 
@@ -28,11 +28,15 @@ def get_recent_rounds(delta = timedelta(hours=48)):
     # Oops, crazy slow again.
     tiebreaks = needs_tiebreaker(count_votes(round.event.event_slug, round.round_slug))
 
+    matches_in_round = len(get_matches(round.event.event_slug, round.round_slug))
+
     if current_user.is_authenticated:
       did_you_vote = get_votes_in_round(current_user.id, round.id)
       did_you_start = len(did_you_vote) > 0
+      did_you_finish = len(did_you_vote) == matches_in_round
     else:
       did_you_start = False
+      did_you_finish = False
 
     recent_rounds.append({
       'name': f'{round.event.name} Round {round.round_slug}',
@@ -41,7 +45,8 @@ def get_recent_rounds(delta = timedelta(hours=48)):
       'slug': f'{round.event.event_slug}-{round.round_slug}',
       'needs_tiebreaker': len(tiebreaks) > 0,
       'tiebreaks': tiebreaks,
-      'did_you_start': did_you_start
+      'did_you_start': did_you_start,
+      'did_you_finish': did_you_finish
     })
 
   return recent_rounds
@@ -167,12 +172,13 @@ def count_votes(event_slug, round_slug):
       for vote in votes:
 
         # only log votes if you finished voting
+        # or if you are tiebreaker
         # doing this in a triple-nested loop is crazy slow.
         # I should work out how to speed it up.
         did_you_vote = get_votes_in_round(vote.user_id, round.id)
         did_you_finish = len(did_you_vote) == len(matches)
 
-        if did_you_finish:
+        if did_you_finish or vote.is_tiebreaker:
           song_dict['voters'].append(get_voter_username(vote))
           song_dict['tally'] += 1
 
@@ -205,14 +211,14 @@ def needs_tiebreaker(match_lsts):
         tied_matches.add(match_num)
   return sorted(list(tied_matches))
 
-def add_vote(submission):
+def add_vote(submission, is_tiebreaker):
   user_id = current_user.id
   for match in submission:
     if 'match' in match:
       match_id = int(re.sub(r'match', '', match))
       song = submission[match]
       song_id = int(re.search(r".*-(.*)", song).group(1))
-      vote = Vote(match_id=match_id, user_id=user_id, song_id=song_id)
+      vote = Vote(match_id=match_id, user_id=user_id, song_id=song_id, is_tiebreaker=is_tiebreaker)
       db.session.merge(vote)
   db.session.commit()
 
@@ -228,6 +234,9 @@ def get_winning_song(match_id):
   # used later to check for complete votes only
   matches = get_matches(match.round.event.event_slug, match.round.round_slug)
 
+  # used later to check for tiebreaker votes
+  round_over = datetime.now() > get_round(match.round.event.event_slug, match.round.round_slug).end_time
+
   for song_idx, song in enumerate(get_songs(match.id)):
 
     song_dict = {'song': song, 'tally': 0}
@@ -237,12 +246,13 @@ def get_winning_song(match_id):
     for vote in votes:
 
       # only log votes if you finished voting
+      # or if you are tiebreaker
       # doing this in a triple-nested loop is crazy slow.
       # I should work out how to speed it up.
       did_you_vote = get_votes_in_round(vote.user_id, match.round.id)
       did_you_finish = len(did_you_vote) == len(matches)
 
-      if did_you_finish:
+      if did_you_finish or vote.is_tiebreaker:
         song_dict['tally'] += 1
 
     match_lst.append(song_dict)
@@ -299,6 +309,22 @@ def populate_round(event_slug, round_slug):
       db.session.add(new_candidate)
 
   db.session.commit()
+
+# Returns a boolean that we can use to check if we should show the matches,
+# or show an unreleased message.
+def is_round_populated(event_slug, round_slug):
+
+  # Matches for the current round we are trying to populate.
+  matches = get_matches(event_slug, round_slug)
+
+  # If any current match has candidates already, return True.
+  for match in matches:
+    songs_in_match = get_songs(match.id)
+    if len(songs_in_match) > 0:
+      return True
+
+  return False
+
 
 
 ###############
@@ -359,8 +385,16 @@ def register():
 @login_required
 def vote(event_slug, round_slug):
 
+  # Attempt to populate before showing "unreleased" - so that when a round opens, somebody
+  # can actually populate it.
   # In theory, this only does something the first time the user requests a round.
   populate_round(event_slug, round_slug)
+
+  # Show "unreleased" if the round hasn't started yet.
+  round_started = datetime.now() > get_round(event_slug, round_slug).start_time
+  if not round_started or not is_round_populated(event_slug, round_slug):
+    return render_template('unreleased.html', title=f'Vote in Round {round_slug}', active_rounds=get_active_rounds(), recent_rounds=get_recent_rounds(),
+      round_started=round_started)
 
   round = get_round(event_slug, round_slug)
   matches = get_matches(event_slug, round_slug)
@@ -373,8 +407,8 @@ def vote(event_slug, round_slug):
   did_you_finish = len(did_you_vote) == len(matches)
 
   # if round_over:
-  # - if we need tiebreaks, and you didn't start, you can be the tiebreaker
-  # - any other case (no tiebreaks needed, or tiebreaks needed but you started/voted), get blocked
+  # - if we need tiebreaks, and you didn't start, then you can be the tiebreaker
+  # - any other case (no tiebreaks needed, or tiebreaks needed but you already started), get blocked
   # did_you_start here gatekeeps tiebreakers to people who haven't started to vote yet
   # if we dislike this, change it I guess
   tiebreaks = needs_tiebreaker(count_votes(event_slug, round_slug))
@@ -402,8 +436,18 @@ def vote(event_slug, round_slug):
 
       radio_choices.append((f'match{match.id}-{song.id}', f'{song.artist} – {song.title}'))
 
-    radio_field = RadioField(f'Match {match_num}:', choices=radio_choices, default=current_vote_name, validators=[Optional()])
-    setattr(VoteForm, f'match{match.id}', radio_field)
+    # Force tiebreak vote to vote in every tiebreaker.
+    if round_over and match_num in tiebreaks:
+      validators = [DataRequired()]
+    else:
+      validators = [Optional()]
+
+    radio_field = RadioField(f'Match {match_num}:', choices=radio_choices, default=current_vote_name, validators=validators)
+
+    # If round is not over, always show every match.
+    # If round is over, only show matches that need tiebreaks.
+    if not round_over or match_num in tiebreaks:
+      setattr(VoteForm, f'match{match.id}', radio_field)
 
   setattr(VoteForm, 'submit', SubmitField('Submit'))
 
@@ -415,13 +459,17 @@ def vote(event_slug, round_slug):
       flash('Voting for this round is closed. See the results:')
       return redirect(url_for('results', event_slug=event_slug, round_slug=round_slug))
     else:
-      add_vote(request.form)
+      # if round is over, you are a tiebreaker, I think?
+      add_vote(request.form, round_over)
 
       did_you_vote = get_votes_in_round(current_user.id, round.id)
       did_you_start = len(did_you_vote) > 0
       did_you_finish = len(did_you_vote) == len(matches)
 
-      if did_you_finish:
+      if round_over:
+        flash('Tiebreaking vote(s) received. Check out the results:')
+        return redirect(url_for('results', event_slug=event_slug, round_slug=round_slug))
+      elif did_you_finish:
         flash('Vote received. While you wait, why not check out the results so far?')
         return redirect(url_for('results', event_slug=event_slug, round_slug=round_slug))
       elif did_you_start:
@@ -430,11 +478,28 @@ def vote(event_slug, round_slug):
       else:
         return redirect(url_for('vote', event_slug=event_slug, round_slug=round_slug))
   else:
-    return render_template('vote.html', title='Vote', active_rounds=get_active_rounds(), recent_rounds=get_recent_rounds(),
-      form=form, did_you_start=did_you_start, did_you_finish=did_you_finish)
+    return render_template('vote.html', title=f'Vote in Round {round_slug}', active_rounds=get_active_rounds(), recent_rounds=get_recent_rounds(),
+      form=form, did_you_start=did_you_start, did_you_finish=did_you_finish, round_over=round_over)
 
 
 @app.route('/results/<event_slug>/<round_slug>')
 def results(event_slug, round_slug):
+
+  # Attempt to populate before showing "unreleased" - so that when a round opens, somebody
+  # can actually populate it.
+  # In theory, this only does something the first time the user requests a round.
+  populate_round(event_slug, round_slug)
+
+  round_started = datetime.now() > get_round(event_slug, round_slug).start_time
+  if not round_started or not is_round_populated(event_slug, round_slug):
+    return render_template('unreleased.html', title=f'Results for Round {round_slug}', active_rounds=get_active_rounds(), recent_rounds=get_recent_rounds(),
+      round_started=round_started)
+
+  round_over = datetime.now() > get_round(event_slug, round_slug).end_time
+  if round_over:
+    title = f'Final Results for Round {round_slug}'
+  else:
+    title = f'Results So Far for Round {round_slug}'
+
   match_lsts = count_votes(event_slug, round_slug)
-  return render_template('results.html', title='Results', active_rounds=get_active_rounds(), recent_rounds=get_recent_rounds(), match_lsts=match_lsts)
+  return render_template('results.html', title=title, active_rounds=get_active_rounds(), recent_rounds=get_recent_rounds(), match_lsts=match_lsts)

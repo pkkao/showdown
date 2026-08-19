@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+{% if round_started %}
+  <p>This round is awaiting tiebreakers to start. Check back later.</p>
+{% else %}
+  <p>This round has not started yet. Check back later.</p>
+{% endif %}
+
+{% endblock %}
