@@ -17,6 +17,7 @@ import pytz
 from urllib.parse import urlsplit
 import re
 from markupsafe import Markup
+import random
 
 # By default, get any rounds that ended in the last 48 hours.
 def get_recent_rounds(delta = timedelta(hours=48)):
@@ -332,6 +333,8 @@ def get_winning_song(match_id):
 # Checks exist so that this hopefully only happens once per round.
 def populate_round(event_slug, round_slug):
 
+  round = get_round(event_slug, round_slug)
+
   # Matches for the current round we are trying to populate.
   matches = get_matches(event_slug, round_slug)
 
@@ -343,32 +346,41 @@ def populate_round(event_slug, round_slug):
 
   # Fetch all the previous rounds that the current round depends on.
   # Each previous round is a (event_slug, round_slug) tuple.
-  prev_rounds = set()
-  for match in matches:
-    for prev_match in match.prev_matches:
-      prev_round = prev_match.round
-      prev_rounds.add((prev_round.event.event_slug, prev_round.round_slug))
+  prev_rounds_lst = []
+  for prev_round in round.prev_rounds:
+    prev_rounds_lst.append((prev_round.event.event_slug, prev_round.round_slug))
 
   # If any previous round needs a tiebreaker, do nothing.
-  for event_slug, round_slug in prev_rounds:
-    match_lsts = count_votes(event_slug, round_slug)
+  for prev_event_slug, prev_round_slug in prev_rounds_lst:
+    match_lsts = count_votes(prev_event_slug, prev_round_slug)
     if needs_tiebreaker(match_lsts):
       return
 
-  # Attempt to populate each match with one winner from each of its previous matches.
-  for new_match in matches:
-    for prev_match in new_match.prev_matches:
+  # Fetch all the winners of matches in the previous rounds.
+  # One winner per match.
+  prev_winners = []
+  for (prev_event_slug, prev_round_slug) in prev_rounds_lst:
+    for prev_match in get_matches(prev_event_slug, prev_round_slug):
+      prev_winners.append(get_winning_song(prev_match.id))  
 
-      new_song_id = get_winning_song(prev_match.id).id
+  # Attempt to populate each match with a winner from our list of winners.
+  # Round-robin gives each match one song, then each match a second song, and so on.
+  # In theory the rounds and matches-per-round are set up so that
+  # len(list of winners) is exactly equal to the number of songs needed in this round.
+  # TODO: Avoid self vs self match-ups. Use a dict of some sort?
+  # Theory: Using an incrementing i here instead of a seed results in March Madness.
+  # Maybe? Not super sure.
+  random.seed(100)
+  while len(prev_winners) > 0:
+    for new_match in matches:
+      i = random.randint(0, len(prev_winners) - 1)
+      new_song_id = prev_winners[i].id
       new_match_id = new_match.id
-
-      # If we fail to get a unique winning song, quit.
-      # In theory checking for tiebreakers should have taken care of this, but IDK.
-      if new_song_id is None:
-        return
 
       new_candidate = Candidate(song_id=new_song_id, match_id=new_match_id)
       db.session.add(new_candidate)
+
+      prev_winners.pop(i)
 
   db.session.commit()
 
@@ -394,80 +406,101 @@ def is_round_populated(event_slug, round_slug):
 
 # match numbers from https://i.imgur.com/IuiOrgC.jpeg
 def create_64_bracket():
-  event = Event(event_slug='fa26-music', name='2026 Fall Music Showdown')
+  event = Event(event_slug='fa26-music', name='2026 Fall Music Showdown',
+    pick_deadline=datetime(2026, 8, 18, 15, 0))
   event = db.session.merge(event)
+  db.session.commit()
+
+  round6 = Round(event_id=event.id, round_slug='6',
+    start_time=datetime(2026, 8, 28, 15, 0),
+    end_time=datetime(2026, 8, 29, 15, 0),
+    next_round_id=-1)
+  round6 = db.session.merge(round6)
+  db.session.commit()
+
+  round5 = Round(event_id=event.id, round_slug='5',
+    start_time=datetime(2026, 8, 27, 15, 0),
+    end_time=datetime(2026, 8, 28, 15, 0),
+    next_round_id=round6.id)
+  round5 = db.session.merge(round5)
+  db.session.commit()
+
+  round4 = Round(event_id=event.id, round_slug='4',
+    start_time=datetime(2026, 8, 26, 15, 0),
+    end_time=datetime(2026, 8, 27, 15, 0),
+    next_round_id=round5.id)
+  round4 = db.session.merge(round4)
+  db.session.commit()
+
+  round3 = Round(event_id=event.id, round_slug='3',
+    start_time=datetime(2026, 8, 25, 15, 0),
+    end_time=datetime(2026, 8, 26, 15, 0),
+    next_round_id=round4.id)
+  round3 = db.session.merge(round3)
+  db.session.commit()
+
+  round2a = Round(event_id=event.id, round_slug='2A',
+    start_time=datetime(2026, 8, 23, 15, 0),
+    end_time=datetime(2026, 8, 24, 15, 0),
+    next_round_id=round3.id)
+  round2b = Round(event_id=event.id, round_slug='2B',
+    start_time=datetime(2026, 8, 24, 15, 0),
+    end_time=datetime(2026, 8, 25, 15, 0),
+    next_round_id=round3.id)
+  round2a = db.session.merge(round2a)
+  round2b = db.session.merge(round2b)
   db.session.commit()
 
   round1a = Round(event_id=event.id, round_slug='1A',
     start_time=datetime(2026, 8, 19, 15, 0),
-    end_time=datetime(2026, 8, 20, 15, 0))
+    end_time=datetime(2026, 8, 20, 15, 0),
+    next_round_id=round2a.id)
   round1b = Round(event_id=event.id, round_slug='1B',
     start_time=datetime(2026, 8, 20, 15, 0),
-    end_time=datetime(2026, 8, 21, 15, 0))
+    end_time=datetime(2026, 8, 21, 15, 0),
+    next_round_id=round2a.id)
   round1c = Round(event_id=event.id, round_slug='1C',
     start_time=datetime(2026, 8, 21, 15, 0),
-    end_time=datetime(2026, 8, 22, 15, 0))
+    end_time=datetime(2026, 8, 22, 15, 0),
+    next_round_id=round2b.id)
   round1d = Round(event_id=event.id, round_slug='1D',
     start_time=datetime(2026, 8, 22, 15, 0),
-    end_time=datetime(2026, 8, 23, 15, 0))
-  round2a = Round(event_id=event.id, round_slug='2A',
-    start_time=datetime(2026, 8, 23, 15, 0),
-    end_time=datetime(2026, 8, 24, 15, 0))
-  round2b = Round(event_id=event.id, round_slug='2B',
-    start_time=datetime(2026, 8, 24, 15, 0),
-    end_time=datetime(2026, 8, 25, 15, 0))
-  round3 = Round(event_id=event.id, round_slug='3',
-    start_time=datetime(2026, 8, 25, 15, 0),
-    end_time=datetime(2026, 8, 26, 15, 0))
-  round4 = Round(event_id=event.id, round_slug='4',
-    start_time=datetime(2026, 8, 26, 15, 0),
-    end_time=datetime(2026, 8, 27, 15, 0))
-  round5 = Round(event_id=event.id, round_slug='5',
-    start_time=datetime(2026, 8, 27, 15, 0),
-    end_time=datetime(2026, 8, 28, 15, 0))
-  round6 = Round(event_id=event.id, round_slug='6',
-    start_time=datetime(2026, 8, 28, 15, 0),
-    end_time=datetime(2026, 8, 29, 15, 0))
+    end_time=datetime(2026, 8, 23, 15, 0),
+    next_round_id=round2b.id)
   round1a = db.session.merge(round1a)
   round1b = db.session.merge(round1b)
   round1c = db.session.merge(round1c)
   round1d = db.session.merge(round1d)
-  round2a = db.session.merge(round2a)
-  round2b = db.session.merge(round2b)
-  round3 = db.session.merge(round3)
-  round4 = db.session.merge(round4)
-  round5 = db.session.merge(round5)
-  round6 = db.session.merge(round6)
   db.session.commit()
 
-  match63 = Match(round_id=round6.id, next_match_id=-1)
+  match63 = Match(round_id=round6.id)
   match63 = db.session.merge(match63)
   db.session.commit()
 
-  match61 = Match(round_id=round5.id, next_match_id=match63.id)
-  match62 = Match(round_id=round5.id, next_match_id=match63.id)
+  match61 = Match(round_id=round5.id)
+  match62 = Match(round_id=round5.id)
   match61 = db.session.merge(match61)
   match62 = db.session.merge(match62)
   db.session.commit()
 
-  match57 = Match(round_id=round4.id, next_match_id=match61.id)
-  match58 = Match(round_id=round4.id, next_match_id=match61.id)
-  match59 = Match(round_id=round4.id, next_match_id=match62.id)
-  match60 = Match(round_id=round4.id, next_match_id=match62.id)
+  match57 = Match(round_id=round4.id)
+  match58 = Match(round_id=round4.id)
+  match59 = Match(round_id=round4.id)
+  match60 = Match(round_id=round4.id)
   match57 = db.session.merge(match57)
   match58 = db.session.merge(match58)
   match59 = db.session.merge(match59)
   match60 = db.session.merge(match60)
   db.session.commit()
 
-  match49 = Match(round_id=round3.id, next_match_id=match57.id)
-  match50 = Match(round_id=round3.id, next_match_id=match57.id)
-  match51 = Match(round_id=round3.id, next_match_id=match58.id)
-  match52 = Match(round_id=round3.id, next_match_id=match58.id)
-  match53 = Match(round_id=round3.id, next_match_id=match59.id)
-  match54 = Match(round_id=round3.id, next_match_id=match59.id)
-  match55 = Match(round_id=round3.id, next_match_id=match60.id)
-  match56 = Match(round_id=round3.id, next_match_id=match60.id)
+  match49 = Match(round_id=round3.id)
+  match50 = Match(round_id=round3.id)
+  match51 = Match(round_id=round3.id)
+  match52 = Match(round_id=round3.id)
+  match53 = Match(round_id=round3.id)
+  match54 = Match(round_id=round3.id)
+  match55 = Match(round_id=round3.id)
+  match56 = Match(round_id=round3.id)
   match49 = db.session.merge(match49)
   match50 = db.session.merge(match50)
   match51 = db.session.merge(match51)
@@ -478,23 +511,23 @@ def create_64_bracket():
   match56 = db.session.merge(match56)
   db.session.commit()
 
-  match33 = Match(round_id=round2a.id, next_match_id=match49.id)
-  match34 = Match(round_id=round2a.id, next_match_id=match49.id)
-  match35 = Match(round_id=round2a.id, next_match_id=match50.id)
-  match36 = Match(round_id=round2a.id, next_match_id=match50.id)
-  match37 = Match(round_id=round2a.id, next_match_id=match51.id)
-  match38 = Match(round_id=round2a.id, next_match_id=match51.id)
-  match39 = Match(round_id=round2a.id, next_match_id=match52.id)
-  match40 = Match(round_id=round2a.id, next_match_id=match52.id)
+  match33 = Match(round_id=round2a.id)
+  match34 = Match(round_id=round2a.id)
+  match35 = Match(round_id=round2a.id)
+  match36 = Match(round_id=round2a.id)
+  match37 = Match(round_id=round2a.id)
+  match38 = Match(round_id=round2a.id)
+  match39 = Match(round_id=round2a.id)
+  match40 = Match(round_id=round2a.id)
 
-  match41 = Match(round_id=round2b.id, next_match_id=match53.id)
-  match42 = Match(round_id=round2b.id, next_match_id=match53.id)
-  match43 = Match(round_id=round2b.id, next_match_id=match54.id)
-  match44 = Match(round_id=round2b.id, next_match_id=match54.id)
-  match45 = Match(round_id=round2b.id, next_match_id=match55.id)
-  match46 = Match(round_id=round2b.id, next_match_id=match55.id)
-  match47 = Match(round_id=round2b.id, next_match_id=match56.id)
-  match48 = Match(round_id=round2b.id, next_match_id=match56.id)
+  match41 = Match(round_id=round2b.id)
+  match42 = Match(round_id=round2b.id)
+  match43 = Match(round_id=round2b.id)
+  match44 = Match(round_id=round2b.id)
+  match45 = Match(round_id=round2b.id)
+  match46 = Match(round_id=round2b.id)
+  match47 = Match(round_id=round2b.id)
+  match48 = Match(round_id=round2b.id)
 
   match33 = db.session.merge(match33)
   match34 = db.session.merge(match34)
@@ -515,41 +548,41 @@ def create_64_bracket():
   match48 = db.session.merge(match48)
   db.session.commit()
 
-  match1 = Match(round_id=round1a.id, next_match_id=match33.id)
-  match2 = Match(round_id=round1a.id, next_match_id=match33.id)
-  match3 = Match(round_id=round1a.id, next_match_id=match34.id)
-  match4 = Match(round_id=round1a.id, next_match_id=match34.id)
-  match5 = Match(round_id=round1a.id, next_match_id=match35.id)
-  match6 = Match(round_id=round1a.id, next_match_id=match35.id)
-  match7 = Match(round_id=round1a.id, next_match_id=match36.id)
-  match8 = Match(round_id=round1a.id, next_match_id=match36.id)
+  match1 = Match(round_id=round1a.id)
+  match2 = Match(round_id=round1a.id)
+  match3 = Match(round_id=round1a.id)
+  match4 = Match(round_id=round1a.id)
+  match5 = Match(round_id=round1a.id)
+  match6 = Match(round_id=round1a.id)
+  match7 = Match(round_id=round1a.id)
+  match8 = Match(round_id=round1a.id)
 
-  match9 = Match(round_id=round1b.id, next_match_id=match37.id)
-  match10 = Match(round_id=round1b.id, next_match_id=match37.id)
-  match11 = Match(round_id=round1b.id, next_match_id=match38.id)
-  match12 = Match(round_id=round1b.id, next_match_id=match38.id)
-  match13 = Match(round_id=round1b.id, next_match_id=match39.id)
-  match14 = Match(round_id=round1b.id, next_match_id=match39.id)
-  match15 = Match(round_id=round1b.id, next_match_id=match40.id)
-  match16 = Match(round_id=round1b.id, next_match_id=match40.id)
+  match9 = Match(round_id=round1b.id)
+  match10 = Match(round_id=round1b.id)
+  match11 = Match(round_id=round1b.id)
+  match12 = Match(round_id=round1b.id)
+  match13 = Match(round_id=round1b.id)
+  match14 = Match(round_id=round1b.id)
+  match15 = Match(round_id=round1b.id)
+  match16 = Match(round_id=round1b.id)
 
-  match17 = Match(round_id=round1c.id, next_match_id=match41.id)
-  match18 = Match(round_id=round1c.id, next_match_id=match41.id)
-  match19 = Match(round_id=round1c.id, next_match_id=match42.id)
-  match20 = Match(round_id=round1c.id, next_match_id=match42.id)
-  match21 = Match(round_id=round1c.id, next_match_id=match43.id)
-  match22 = Match(round_id=round1c.id, next_match_id=match43.id)
-  match23 = Match(round_id=round1c.id, next_match_id=match44.id)
-  match24 = Match(round_id=round1c.id, next_match_id=match44.id)
+  match17 = Match(round_id=round1c.id)
+  match18 = Match(round_id=round1c.id)
+  match19 = Match(round_id=round1c.id)
+  match20 = Match(round_id=round1c.id)
+  match21 = Match(round_id=round1c.id)
+  match22 = Match(round_id=round1c.id)
+  match23 = Match(round_id=round1c.id)
+  match24 = Match(round_id=round1c.id)
 
-  match25 = Match(round_id=round1d.id, next_match_id=match45.id)
-  match26 = Match(round_id=round1d.id, next_match_id=match45.id)
-  match27 = Match(round_id=round1d.id, next_match_id=match46.id)
-  match28 = Match(round_id=round1d.id, next_match_id=match46.id)
-  match29 = Match(round_id=round1d.id, next_match_id=match47.id)
-  match30 = Match(round_id=round1d.id, next_match_id=match47.id)
-  match31 = Match(round_id=round1d.id, next_match_id=match48.id)
-  match32 = Match(round_id=round1d.id, next_match_id=match48.id)
+  match25 = Match(round_id=round1d.id)
+  match26 = Match(round_id=round1d.id)
+  match27 = Match(round_id=round1d.id)
+  match28 = Match(round_id=round1d.id)
+  match29 = Match(round_id=round1d.id)
+  match30 = Match(round_id=round1d.id)
+  match31 = Match(round_id=round1d.id)
+  match32 = Match(round_id=round1d.id)
 
   match1 = db.session.merge(match1)
   match2 = db.session.merge(match2)
@@ -602,11 +635,13 @@ def populate_first_round():
   i = 0
   for first_round in first_rounds:
     for match in first_round:
-      new_song_1 = Song(user_id=3, event_id=event.id,
-        artist=f'Artist {i}', title=f'Title {i}', link=f'www{i}.example.com')
+      new_song_1 = Song(user_id=1, event_id=event.id,
+        artist=f'Artist {i}', title=f'Title {i}', link=f'www{i}.example.com',
+        pick_num=(i % 3) + 1, pick_time=datetime.now(), approved='APPROVED')
       i += 1
-      new_song_2 = Song(user_id=3, event_id=event.id,
-        artist=f'Artist {i}', title=f'Title {i}', link=f'www{i}.example.com')
+      new_song_2 = Song(user_id=1, event_id=event.id,
+        artist=f'Artist {i}', title=f'Title {i}', link=f'www{i}.example.com',
+        pick_num=(i % 3) + 1, pick_time=datetime.now(), approved='APPROVED')
       i += 1
       new_song_1 = db.session.merge(new_song_1)
       new_song_2 = db.session.merge(new_song_2)

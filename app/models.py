@@ -52,8 +52,16 @@ class Round(db.Model):
   start_time: so.Mapped[datetime] = so.mapped_column(sa.DateTime())
   end_time: so.Mapped[datetime] = so.mapped_column(sa.DateTime())
 
+  # the round (singular) that the winners of this round all advance to
+  next_round_id: so.Mapped[int] = so.mapped_column(sa.ForeignKey('round.id'), index=True)
+
   event: so.Mapped['Event'] = so.relationship(back_populates='rounds')
   matches: so.WriteOnlyMapped['Match'] = so.relationship(back_populates='round')
+
+  # one or more prev_rounds (plural) have their winners enter this round
+  # the winners of this round all advance to next_round (singular)
+  prev_rounds: so.Mapped[list['Round']] = so.relationship('Round', back_populates='next_round', remote_side=[next_round_id])
+  next_round: so.Mapped['Round | None'] = so.relationship('Round', back_populates='prev_rounds', remote_side=[id])
 
   def __str__(self):
     return f'{self.event_slug}-{self.round_slug}'
@@ -69,7 +77,7 @@ class Song(db.Model):
   pick_num: so.Mapped[int] = so.mapped_column(index=True)
   pick_time: so.Mapped[datetime] = so.mapped_column(sa.DateTime())
   approved: so.Mapped[str] = so.mapped_column(sa.String(256), index=True)
-  approval_message: so.Mapped[str] = so.mapped_column(sa.String(1024))
+  approval_message: so.Mapped[str] = so.mapped_column(sa.String(1024), nullable=True)
 
   user: so.Mapped['User'] = so.relationship(back_populates='songs')
   event: so.Mapped['Event'] = so.relationship(back_populates='songs')
@@ -79,22 +87,13 @@ class Song(db.Model):
 
 @dataclass
 class Match(db.Model):
-  __tablename__ = 'match'
 
   id: so.Mapped[int] = so.mapped_column(primary_key=True)
   round_id: so.Mapped[int] = so.mapped_column(sa.ForeignKey(Round.id), index=True)
 
-  # the match that the winner advances to
-  next_match_id: so.Mapped[int] = so.mapped_column(sa.ForeignKey('match.id'), index=True)
-
   round: so.Mapped['Round'] = so.relationship(back_populates='matches')
   votes: so.WriteOnlyMapped['Vote'] = so.relationship(back_populates='match')
   candidates: so.WriteOnlyMapped['Candidate'] = so.relationship(back_populates='match')
-
-  # one winner from each of the prev_matches shows up in this match
-  # the winner of this match advances to next_match
-  prev_matches: so.Mapped[list['Match']] = so.relationship('Match', back_populates='next_match', remote_side=[next_match_id])
-  next_match: so.Mapped['Match | None'] = so.relationship('Match', back_populates='prev_matches', remote_side=[id])
 
   def __str__(self):
     return f'{self.round} match {self.id}'

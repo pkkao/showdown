@@ -1,8 +1,8 @@
-"""first commit
+"""initial commit
 
-Revision ID: babd1300e3f1
+Revision ID: a290275b0dfd
 Revises: 
-Create Date: 2026-08-17 02:22:37.492494
+Create Date: 2026-08-20 02:07:49.895749
 
 """
 from alembic import op
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision = 'babd1300e3f1'
+revision = 'a290275b0dfd'
 down_revision = None
 branch_labels = None
 depends_on = None
@@ -22,7 +22,8 @@ def upgrade():
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('event_slug', sa.String(length=256), nullable=False),
     sa.Column('name', sa.String(length=256), nullable=False),
-    sa.PrimaryKeyConstraint('id')
+    sa.Column('pick_deadline', sa.DateTime(), nullable=False),
+    sa.PrimaryKeyConstraint('id', name=op.f('pk_event'))
     )
     with op.batch_alter_table('event', schema=None) as batch_op:
         batch_op.create_index(batch_op.f('ix_event_event_slug'), ['event_slug'], unique=True)
@@ -33,7 +34,7 @@ def upgrade():
     sa.Column('username', sa.String(length=256), nullable=False),
     sa.Column('email', sa.String(length=256), nullable=False),
     sa.Column('password_hash', sa.String(length=256), nullable=True),
-    sa.PrimaryKeyConstraint('id')
+    sa.PrimaryKeyConstraint('id', name=op.f('pk_user'))
     )
     with op.batch_alter_table('user', schema=None) as batch_op:
         batch_op.create_index(batch_op.f('ix_user_email'), ['email'], unique=True)
@@ -45,11 +46,14 @@ def upgrade():
     sa.Column('round_slug', sa.String(length=256), nullable=False),
     sa.Column('start_time', sa.DateTime(), nullable=False),
     sa.Column('end_time', sa.DateTime(), nullable=False),
-    sa.ForeignKeyConstraint(['event_id'], ['event.id'], ),
-    sa.PrimaryKeyConstraint('id')
+    sa.Column('next_round_id', sa.Integer(), nullable=False),
+    sa.ForeignKeyConstraint(['event_id'], ['event.id'], name=op.f('fk_round_event_id_event')),
+    sa.ForeignKeyConstraint(['next_round_id'], ['round.id'], name=op.f('fk_round_next_round_id_round')),
+    sa.PrimaryKeyConstraint('id', name=op.f('pk_round'))
     )
     with op.batch_alter_table('round', schema=None) as batch_op:
         batch_op.create_index(batch_op.f('ix_round_event_id'), ['event_id'], unique=False)
+        batch_op.create_index(batch_op.f('ix_round_next_round_id'), ['next_round_id'], unique=False)
         batch_op.create_index(batch_op.f('ix_round_round_slug'), ['round_slug'], unique=False)
 
     op.create_table('song',
@@ -59,22 +63,28 @@ def upgrade():
     sa.Column('artist', sa.String(length=256), nullable=False),
     sa.Column('title', sa.String(length=256), nullable=False),
     sa.Column('link', sa.String(length=256), nullable=False),
-    sa.ForeignKeyConstraint(['event_id'], ['event.id'], ),
-    sa.ForeignKeyConstraint(['user_id'], ['user.id'], ),
-    sa.PrimaryKeyConstraint('id')
+    sa.Column('pick_num', sa.Integer(), nullable=False),
+    sa.Column('pick_time', sa.DateTime(), nullable=False),
+    sa.Column('approved', sa.String(length=256), nullable=False),
+    sa.Column('approval_message', sa.String(length=1024), nullable=False),
+    sa.ForeignKeyConstraint(['event_id'], ['event.id'], name=op.f('fk_song_event_id_event')),
+    sa.ForeignKeyConstraint(['user_id'], ['user.id'], name=op.f('fk_song_user_id_user')),
+    sa.PrimaryKeyConstraint('id', name=op.f('pk_song'))
     )
     with op.batch_alter_table('song', schema=None) as batch_op:
-        batch_op.create_index(batch_op.f('ix_song_artist'), ['artist'], unique=True)
+        batch_op.create_index(batch_op.f('ix_song_approved'), ['approved'], unique=False)
+        batch_op.create_index(batch_op.f('ix_song_artist'), ['artist'], unique=False)
         batch_op.create_index(batch_op.f('ix_song_event_id'), ['event_id'], unique=False)
-        batch_op.create_index(batch_op.f('ix_song_link'), ['link'], unique=True)
-        batch_op.create_index(batch_op.f('ix_song_title'), ['title'], unique=True)
+        batch_op.create_index(batch_op.f('ix_song_link'), ['link'], unique=False)
+        batch_op.create_index(batch_op.f('ix_song_pick_num'), ['pick_num'], unique=False)
+        batch_op.create_index(batch_op.f('ix_song_title'), ['title'], unique=False)
         batch_op.create_index(batch_op.f('ix_song_user_id'), ['user_id'], unique=False)
 
     op.create_table('match',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('round_id', sa.Integer(), nullable=False),
-    sa.ForeignKeyConstraint(['round_id'], ['round.id'], ),
-    sa.PrimaryKeyConstraint('id')
+    sa.ForeignKeyConstraint(['round_id'], ['round.id'], name=op.f('fk_match_round_id_round')),
+    sa.PrimaryKeyConstraint('id', name=op.f('pk_match'))
     )
     with op.batch_alter_table('match', schema=None) as batch_op:
         batch_op.create_index(batch_op.f('ix_match_round_id'), ['round_id'], unique=False)
@@ -82,9 +92,9 @@ def upgrade():
     op.create_table('candidate',
     sa.Column('song_id', sa.Integer(), nullable=False),
     sa.Column('match_id', sa.Integer(), nullable=False),
-    sa.ForeignKeyConstraint(['match_id'], ['match.id'], ),
-    sa.ForeignKeyConstraint(['song_id'], ['song.id'], ),
-    sa.PrimaryKeyConstraint('song_id', 'match_id')
+    sa.ForeignKeyConstraint(['match_id'], ['match.id'], name=op.f('fk_candidate_match_id_match')),
+    sa.ForeignKeyConstraint(['song_id'], ['song.id'], name=op.f('fk_candidate_song_id_song')),
+    sa.PrimaryKeyConstraint('song_id', 'match_id', name=op.f('pk_candidate'))
     )
     with op.batch_alter_table('candidate', schema=None) as batch_op:
         batch_op.create_index(batch_op.f('ix_candidate_match_id'), ['match_id'], unique=False)
@@ -94,10 +104,11 @@ def upgrade():
     sa.Column('match_id', sa.Integer(), nullable=False),
     sa.Column('user_id', sa.Integer(), nullable=False),
     sa.Column('song_id', sa.Integer(), nullable=False),
-    sa.ForeignKeyConstraint(['match_id'], ['match.id'], ),
-    sa.ForeignKeyConstraint(['song_id'], ['song.id'], ),
-    sa.ForeignKeyConstraint(['user_id'], ['user.id'], ),
-    sa.PrimaryKeyConstraint('match_id', 'user_id'),
+    sa.Column('is_tiebreaker', sa.Boolean(), nullable=False),
+    sa.ForeignKeyConstraint(['match_id'], ['match.id'], name=op.f('fk_vote_match_id_match')),
+    sa.ForeignKeyConstraint(['song_id'], ['song.id'], name=op.f('fk_vote_song_id_song')),
+    sa.ForeignKeyConstraint(['user_id'], ['user.id'], name=op.f('fk_vote_user_id_user')),
+    sa.PrimaryKeyConstraint('match_id', 'user_id', name=op.f('pk_vote')),
     sa.UniqueConstraint('match_id', 'user_id', name='vote once per match')
     )
     with op.batch_alter_table('vote', schema=None) as batch_op:
@@ -128,13 +139,16 @@ def downgrade():
     with op.batch_alter_table('song', schema=None) as batch_op:
         batch_op.drop_index(batch_op.f('ix_song_user_id'))
         batch_op.drop_index(batch_op.f('ix_song_title'))
+        batch_op.drop_index(batch_op.f('ix_song_pick_num'))
         batch_op.drop_index(batch_op.f('ix_song_link'))
         batch_op.drop_index(batch_op.f('ix_song_event_id'))
         batch_op.drop_index(batch_op.f('ix_song_artist'))
+        batch_op.drop_index(batch_op.f('ix_song_approved'))
 
     op.drop_table('song')
     with op.batch_alter_table('round', schema=None) as batch_op:
         batch_op.drop_index(batch_op.f('ix_round_round_slug'))
+        batch_op.drop_index(batch_op.f('ix_round_next_round_id'))
         batch_op.drop_index(batch_op.f('ix_round_event_id'))
 
     op.drop_table('round')
