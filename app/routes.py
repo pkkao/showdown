@@ -803,11 +803,17 @@ def edit_nomination(user_id, event_id, artist, title, link, pick_num):
     # If no existing pick, just do nothing.
     return
 
+  # If nothing was changed, do nothing.
+  if existing_pick is not None:
+    if artist == existing_pick.artist and title == existing_pick.title and link == existing_pick.link:
+      return
+
   if existing_pick:
     existing_pick.artist = artist
     existing_pick.title = title
     existing_pick.link = link
     existing_pick.approved = 'PENDING' # new/modified noms are pending by default
+    existing_pick.approval_message = ''
     existing_pick.pick_time = datetime.now()
     existing_pick = db.session.merge(existing_pick)
     db.session.commit()
@@ -820,6 +826,7 @@ def edit_nomination(user_id, event_id, artist, title, link, pick_num):
       link=link,
       pick_num=pick_num,
       approved='PENDING',
+      approval_message='',
       pick_time=datetime.now())
     db.session.add(new_nom)
     db.session.commit()

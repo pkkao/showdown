@@ -24,6 +24,9 @@ class User(UserMixin, db.Model):
   def check_password(self, password):
     return check_password_hash(self.password_hash, password)
 
+  def __str__(self):
+    return self.username
+
 @login.user_loader
 def load_user(id):
   return db.session.get(User, int(id))
@@ -38,6 +41,9 @@ class Event(db.Model):
   rounds: so.WriteOnlyMapped['Round'] = so.relationship(back_populates='event')
   songs: so.WriteOnlyMapped['Song'] = so.relationship(back_populates='event')
 
+  def __str__(self):
+    return self.event_slug
+
 @dataclass
 class Round(db.Model):
   id: so.Mapped[int] = so.mapped_column(primary_key=True)
@@ -48,6 +54,9 @@ class Round(db.Model):
 
   event: so.Mapped['Event'] = so.relationship(back_populates='rounds')
   matches: so.WriteOnlyMapped['Match'] = so.relationship(back_populates='round')
+
+  def __str__(self):
+    return f'{self.event_slug}-{self.round_slug}'
 
 @dataclass
 class Song(db.Model):
@@ -64,6 +73,9 @@ class Song(db.Model):
 
   user: so.Mapped['User'] = so.relationship(back_populates='songs')
   event: so.Mapped['Event'] = so.relationship(back_populates='songs')
+
+  def __str__(self):
+    return f'{self.artist} – {self.title}'
 
 @dataclass
 class Match(db.Model):
@@ -84,6 +96,9 @@ class Match(db.Model):
   prev_matches: so.Mapped[list['Match']] = so.relationship('Match', back_populates='next_match', remote_side=[next_match_id])
   next_match: so.Mapped['Match | None'] = so.relationship('Match', back_populates='prev_matches', remote_side=[id])
 
+  def __str__(self):
+    return f'{self.round} match {self.id}'
+
 @dataclass
 class Vote(db.Model):
   match_id: so.Mapped[int] = so.mapped_column(sa.ForeignKey(Match.id), index=True, primary_key=True)
@@ -94,6 +109,9 @@ class Vote(db.Model):
   sa.UniqueConstraint(match_id, user_id, name='vote once per match')
 
   match: so.Mapped['Match'] = so.relationship(back_populates='votes')
+
+  def __str__(self):
+    return f'{self.match}, {self.user_id} voted for {self.song_id}'
 
 @dataclass
 class Candidate(db.Model):
