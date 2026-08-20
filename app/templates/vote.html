@@ -21,7 +21,7 @@
     
     {% for field in form %}
         {% if field.type == "RadioField" %}
-          {{ field.label }}{{ field }}
+          {{ field.label|safe }}{{ field|safe }}
           {% for error in field.errors %}
             <span style="color: red;">[{{ error }}]</span><br><br>
           {% endfor %}

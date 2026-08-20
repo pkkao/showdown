@@ -11,7 +11,7 @@
         {% set candidateidx = loop.index0 %}
         <details>
           <summary>
-            {{ candidate.song.artist }} - {{ candidate.song.title }} ({{ candidate.tally }})
+            <a href={{ candidate.song.link }}>{{ candidate.song.artist }} – {{ candidate.song.title }}</a> ({{ candidate.tally }})
             {% if candidate.eliminated %}
               <b>[Eliminated: Nominated by {{ candidate.song.user.username }}]</b>
             {% endif %}

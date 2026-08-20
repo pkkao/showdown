@@ -7,6 +7,30 @@
     If you edit a pick, it must be re-approved.
   </p>
 
+  <details>
+    <summary>All users' picks so far (click to expand):</summary>
+
+    <ul>
+    {% for user in all_pick_statuses %}
+      <li>
+        {{ user }}:
+        {% for pick in all_pick_statuses[user] %}
+          {% if all_pick_statuses[user][pick] == "APPROVED" %}
+          <div style="display: inline; color: green;">APPROVED</div>{{", " if not loop.last}}
+          {% elif all_pick_statuses[user][pick] == "REJECTED" %}
+          <div style="display: inline; color: red;">REJECTED</div>{{", " if not loop.last}}
+          {% elif all_pick_statuses[user][pick] == "PENDING" %}
+          <div style="display: inline; color: orange;">PENDING</div>{{", " if not loop.last}}
+          {% endif %}
+        {% endfor %}
+      </li>
+    {% endfor %}
+    </ul>
+  </details>
+
+  <br><br>
+
+  Your picks:
   <ul>
   {% for pick in pick_status %}
     <li>

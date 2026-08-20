@@ -16,6 +16,7 @@ from datetime import datetime, timedelta
 import pytz
 from urllib.parse import urlsplit
 import re
+from markupsafe import Markup
 
 # By default, get any rounds that ended in the last 48 hours.
 def get_recent_rounds(delta = timedelta(hours=48)):
@@ -72,6 +73,7 @@ def get_active_rounds():
 
   return active_rounds
 
+# Get the pick statuses for a single user in a single event.
 def get_pick_status(user_id, event_slug):
   event = get_event(event_slug)
 
@@ -88,6 +90,25 @@ def get_pick_status(user_id, event_slug):
       pick_status[pick_num] = 'BLANK'
 
   return pick_status
+
+# Get all the pick statuses for all users in a single event.
+# Returns a dict of dicts.
+def get_all_pick_statuses(event_slug):
+  event = get_event(event_slug)
+  pick_statuses = {}
+
+  # Checking every user might be slow if this site ever gets big.
+  # Until then, whatever.
+  all_users = db.session.scalars(sa.select(User)).all()
+
+  for user in all_users:
+    user_has_picks = db.session.scalar(sa.select(Song)
+      .filter(Song.user_id == user.id)
+      .filter(Song.event_id == event.id))
+    if user_has_picks:
+      pick_statuses[user.username] = get_pick_status(user.id, event_slug)
+
+  return pick_statuses
 
 def get_active_nominations():
 
@@ -710,7 +731,7 @@ def vote(event_slug, round_slug):
 
       song = db.session.scalar(sa.select(Song).where(Song.id == candidate.song_id))
 
-      radio_choices.append((f'match{match.id}-{song.id}', f'{song.artist} – {song.title}'))
+      radio_choices.append((f'match{match.id}-{song.id}', Markup(f'<a href="{song.link}">{song.artist} – {song.title}</a>')))
 
     # Force tiebreak vote to vote in every tiebreaker.
     if round_over and match_num in tiebreaks:
@@ -849,6 +870,9 @@ def nominate(event_slug):
   # This 404s if you try to submit noms for a nonexistent event. Cool.
   event = get_event(event_slug)
 
+  # Get all pick statuses for all users.
+  all_pick_statuses = get_all_pick_statuses(event_slug)
+
   class NominationForm(FlaskForm):
     # Checks only pick_num: If one is full, they must all be full.
     def check_pick(self, pick_num, artist, title, link):
@@ -959,4 +983,4 @@ def nominate(event_slug):
   else:
     return render_template('nominate.html', title=f'Nominations for {event.name}', 
       active_rounds=get_active_rounds(), recent_rounds=get_recent_rounds(), active_nominations=get_active_nominations(),
-      form=form, pick_status=pick_status, pick_messages=pick_messages)
+      form=form, pick_status=pick_status, pick_messages=pick_messages, all_pick_statuses=all_pick_statuses)
