@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+  <p>
+    Submit (and re-submit) picks anytime until the deadline. 
+    If you edit a pick, it must be re-approved.
+  </p>
+
+  <ul>
+  {% for pick in pick_status %}
+    <li>
+      {% if pick_status[pick] == "APPROVED" %}
+      <div style="color: green;">Pick {{ pick }} is APPROVED.</div>
+      {% elif pick_status[pick] == "REJECTED" %}
+      <div style="color: red;">Pick {{ pick }} is REJECTED.</div>
+      {% elif pick_status[pick] == "PENDING" %}
+      <div style="color: orange;">Pick {{ pick }} is PENDING.</div>
+      {% elif pick_status[pick] == "BLANK" %}
+      <div style="color: gray;">Pick {{ pick }} is BLANK.</div>
+      {% endif %}
+      {% if pick_messages[pick] != "" %}
+      [Message from admin: {{ pick_messages[pick] }}]
+      {% endif %}
+    </li>
+  {% endfor %}
+  </ul>
+
+  <form action="" method="POST" onsubmit="return confirm('Are you sure? If you edited an approved pick, it must be re-approved.')" novalidate>
+    {{ form.hidden_tag() }}
+    
+    {% for field in form %}
+      <p>
+        {% if field.type == "StringField" %}
+          {{ field.label }}<br>{{ field(size=48) }}
+          {% for error in field.errors %}
+            <span style="color: red;">[{{ error }}]</span><br><br>
+          {% endfor %}
+        {% endif %}
+      </p>
+    {% endfor %}
+
+    {{ form.submit() }}
+  </form>
+
+{% endblock %}

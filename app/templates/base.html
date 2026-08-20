@@ -71,6 +71,42 @@
     </script>
 
     <br>
+    Ongoing sign-ups:
+    <ul>
+      {% if active_nominations|length == 0 %}
+        <li>None</li>
+      {% endif %}
+      {% for nomination in active_nominations %}
+        <li>
+          {{ nomination.name }} Sign-Ups: <b><div id="{{ nomination.event_slug }}" style="display: inline"></div></b>
+
+          [<a href="{{ url_for('nominate', event_slug=nomination.event_slug) }}">submit picks</a>]
+
+          {% if current_user.is_authenticated %}
+            [Pick statuses:
+            {% for pick in nomination.pick_status %}
+              {% if nomination.pick_status[pick] == "APPROVED" %}
+              <div style="display: inline; color: green;">APPROVED</div>
+              {% elif nomination.pick_status[pick] == "REJECTED" %}
+              <div style="display: inline; color: red;">REJECTED</div>
+              {% elif nomination.pick_status[pick] == "PENDING" %}
+              <div style="display: inline; color: orange;">PENDING</div>
+              {% elif nomination.pick_status[pick] == "BLANK" %}
+              <div style="display: inline; color: gray;">BLANK</div>
+              {% endif %}
+              {{", " if not loop.last}}
+            {% endfor %}
+            ]
+          {% else %}
+            <div style="display: inline; color: gray">[<a href="{{ url_for('login') }}">Log in</a> to check if your picks were approved.]</div>
+          {% endif %}
+
+          <script>setCountDown("{{ nomination.event_slug }}", "{{ nomination.pick_deadline }}")</script>
+        </li>
+      {% endfor %}
+    </ul>
+
+    <br>
     Ongoing rounds:
     <ul>
       {% if active_rounds|length == 0 %}

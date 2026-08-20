@@ -2,8 +2,8 @@ from flask import render_template, flash, redirect, request, url_for
 from app import app
 
 from flask_wtf import FlaskForm
-from wtforms import RadioField, SubmitField
-from wtforms.validators import Optional, DataRequired
+from wtforms import RadioField, SubmitField, StringField
+from wtforms.validators import Optional, DataRequired, ValidationError
 
 from flask_login import current_user, login_user, login_required, logout_user
 
@@ -72,6 +72,47 @@ def get_active_rounds():
 
   return active_rounds
 
+def get_pick_status(user_id, event_slug):
+  event = get_event(event_slug)
+
+  pick_status = {}
+
+  # maybe the number of picks can be variable in the future
+  # for now, hard-code 4 picks
+  for pick_num in range(1, 5):
+    existing_pick = get_pick(user_id, event.id, pick_num)
+
+    if existing_pick:
+      pick_status[pick_num] = existing_pick.approved
+    else:
+      pick_status[pick_num] = 'BLANK'
+
+  return pick_status
+
+def get_active_nominations():
+
+  active_nominations = []
+
+  dtnow = datetime.now()
+  events = db.session.scalars(sa.select(Event)
+    .filter(Event.pick_deadline > dtnow)).all()
+
+  for event in events:
+    if current_user.is_authenticated:
+      pick_status = get_pick_status(current_user.id, event.event_slug)
+    else:
+      pick_status = None
+
+    active_nominations.append({
+      'name': event.name,
+      'event_slug': event.event_slug,
+      'pick_status': pick_status,
+      'pick_deadline': event.pick_deadline
+    })
+
+  return active_nominations
+
+
 ##################
 # DATABASE UTILS #
 ##################
@@ -107,6 +148,13 @@ def get_round(event_slug, round_slug):
     .filter(Event.event_slug == event_slug) # in specific event
     )
   return round
+
+# Get the specified Event object.
+def get_event(event_slug):
+  event = db.one_or_404(sa.select(Event)
+    .filter(Event.event_slug == event_slug) # in specific event
+    )
+  return event
 
 # Get a list of all Match objects for a specific round.
 # Return value is ordered by Match ID.
@@ -563,7 +611,8 @@ def index():
     un = f'You are: {current_user.username}'
   else:
     un = 'You are: Anonymous'
-  return render_template('debug.html', debug=un, active_rounds=get_active_rounds(), recent_rounds=get_recent_rounds())
+  return render_template('debug.html', debug=un, 
+    active_rounds=get_active_rounds(), recent_rounds=get_recent_rounds(), active_nominations=get_active_nominations())
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -581,7 +630,8 @@ def login():
     if not next_page or urlsplit(next_page).netloc != '':
       next_page = url_for('index')
     return redirect(next_page)
-  return render_template('login.html', title='Sign In', form=form, active_rounds=get_active_rounds(), recent_rounds=get_recent_rounds())
+  return render_template('login.html', title='Sign In', form=form,
+    active_rounds=get_active_rounds(), recent_rounds=get_recent_rounds(), active_nominations=get_active_nominations())
 
 @app.route('/logout')
 def logout():
@@ -600,7 +650,8 @@ def register():
     db.session.commit()
     flash(f'Registered as {user.username}')
     return redirect(url_for('login'))
-  return render_template('register.html', title='Register', form=form, active_rounds=get_active_rounds(), recent_rounds=get_recent_rounds())
+  return render_template('register.html', title='Register', form=form,
+    active_rounds=get_active_rounds(), recent_rounds=get_recent_rounds(), active_nominations=get_active_nominations())
 
 
 ###############
@@ -619,7 +670,8 @@ def vote(event_slug, round_slug):
   # Show "unreleased" if the round hasn't started yet.
   round_started = datetime.now() > get_round(event_slug, round_slug).start_time
   if not round_started or not is_round_populated(event_slug, round_slug):
-    return render_template('unreleased.html', title=f'Vote in Round {round_slug}', active_rounds=get_active_rounds(), recent_rounds=get_recent_rounds(),
+    return render_template('unreleased.html', title=f'Vote in Round {round_slug}',
+      active_rounds=get_active_rounds(), recent_rounds=get_recent_rounds(), active_nominations=get_active_nominations(),
       round_started=round_started)
 
   round = get_round(event_slug, round_slug)
@@ -700,7 +752,8 @@ def vote(event_slug, round_slug):
       else:
         return redirect(url_for('vote', event_slug=event_slug, round_slug=round_slug))
   else:
-    return render_template('vote.html', title=f'Vote in Round {round_slug}', active_rounds=get_active_rounds(), recent_rounds=get_recent_rounds(),
+    return render_template('vote.html', title=f'Vote in Round {round_slug}', 
+      active_rounds=get_active_rounds(), recent_rounds=get_recent_rounds(), active_nominations=get_active_nominations(),
       form=form, did_you_start=did_you_start, did_you_finish=did_you_finish, round_over=round_over)
 
 
@@ -714,7 +767,8 @@ def results(event_slug, round_slug):
 
   round_started = datetime.now() > get_round(event_slug, round_slug).start_time
   if not round_started or not is_round_populated(event_slug, round_slug):
-    return render_template('unreleased.html', title=f'Results for Round {round_slug}', active_rounds=get_active_rounds(), recent_rounds=get_recent_rounds(),
+    return render_template('unreleased.html', title=f'Results for Round {round_slug}',
+      active_rounds=get_active_rounds(), recent_rounds=get_recent_rounds(), active_nominations=get_active_nominations(),
       round_started=round_started)
 
   round_over = datetime.now() > get_round(event_slug, round_slug).end_time
@@ -724,4 +778,178 @@ def results(event_slug, round_slug):
     title = f'Results So Far for Round {round_slug}'
 
   match_lsts = count_votes(event_slug, round_slug)
-  return render_template('results.html', title=title, active_rounds=get_active_rounds(), recent_rounds=get_recent_rounds(), match_lsts=match_lsts)
+  return render_template('results.html', title=title, 
+    active_rounds=get_active_rounds(), recent_rounds=get_recent_rounds(), active_nominations=get_active_nominations(),
+    match_lsts=match_lsts)
+
+
+###################
+# NOMINATE ROUTES #
+###################
+
+# Use this when a user submits a nomination (new or changed).
+def edit_nomination(user_id, event_id, artist, title, link, pick_num):
+  existing_pick = db.session.scalar(sa.select(Song)
+    .filter(Song.user_id == user_id)
+    .filter(Song.event_id == event_id)
+    .filter(Song.pick_num == pick_num))
+
+  # If pick is edited to be blank, clear out database.
+  if artist == '' and title == '' and link == '':
+    # If existing pick, clear it.
+    if existing_pick is not None:
+      db.session.delete(existing_pick)
+      db.session.commit()
+    # If no existing pick, just do nothing.
+    return
+
+  if existing_pick:
+    existing_pick.artist = artist
+    existing_pick.title = title
+    existing_pick.link = link
+    existing_pick.approved = 'PENDING' # new/modified noms are pending by default
+    existing_pick.pick_time = datetime.now()
+    existing_pick = db.session.merge(existing_pick)
+    db.session.commit()
+  else:
+    new_nom = Song(
+      user_id=user_id,
+      event_id=event_id,
+      artist=artist,
+      title=title,
+      link=link,
+      pick_num=pick_num,
+      approved='PENDING',
+      pick_time=datetime.now())
+    db.session.add(new_nom)
+    db.session.commit()
+
+# Used to pre-populate the form with existing picks.
+def get_pick(user_id, event_id, pick_num):
+  existing_pick = db.session.scalar(sa.select(Song)
+    .filter(Song.user_id == user_id)
+    .filter(Song.event_id == event_id)
+    .filter(Song.pick_num == pick_num))
+  if existing_pick:
+    return existing_pick
+  else:
+    return None
+
+
+@app.route('/nominate/<event_slug>', methods=['GET', 'POST'])
+@login_required
+def nominate(event_slug):
+  # This 404s if you try to submit noms for a nonexistent event. Cool.
+  event = get_event(event_slug)
+
+  class NominationForm(FlaskForm):
+    # Checks only pick_num: If one is full, they must all be full.
+    def check_pick(self, pick_num, artist, title, link):
+      fields_filled = [artist != '', title != '', link != '']
+      if any(fields_filled) and not all(fields_filled):
+        raise ValidationError(f'Pick {pick_num} is missing at least one of artist/title/link.')
+
+    # Checks that all picks up to (not including) pick_num are full.
+    def check_submit(self, pick_num):
+      pick1 = [self.pick1_artist.raw_data[0] != '', self.pick1_title.raw_data[0] != '', self.pick1_link.raw_data[0] != '']
+      pick2 = [self.pick2_artist.raw_data[0] != '', self.pick2_title.raw_data[0] != '', self.pick2_link.raw_data[0] != '']
+      pick3 = [self.pick3_artist.raw_data[0] != '', self.pick3_title.raw_data[0] != '', self.pick3_link.raw_data[0] != '']
+      pick4 = [self.pick4_artist.raw_data[0] != '', self.pick4_title.raw_data[0] != '', self.pick4_link.raw_data[0] != '']
+      
+      if pick_num == 2:
+        if any(pick2) and not all(pick1):
+          raise ValidationError('Fill in pick 1 before filling in later ones.')
+      if pick_num == 3:
+        if any(pick3) and not (all(pick1) and all(pick2)):
+          raise ValidationError('Fill in picks 1 and 2 before filling in later ones.')
+      if pick_num == 4:
+        if any(pick4) and not (all(pick1) and all(pick2) and all(pick3)):
+          raise ValidationError('Fill in picks 1, 2, and 3 before filling in later ones.')
+
+    def validate_pick1_artist(self, pick1_artist):
+      self.check_pick(1, self.pick1_artist.raw_data[0], self.pick1_title.raw_data[0], self.pick1_link.raw_data[0])
+
+    def validate_pick1_title(self, pick1_title):
+      self.check_pick(1, self.pick1_artist.raw_data[0], self.pick1_title.raw_data[0], self.pick1_link.raw_data[0])
+
+    def validate_pick1_link(self, pick1_link):
+      self.check_pick(1, self.pick1_artist.raw_data[0], self.pick1_title.raw_data[0], self.pick1_link.raw_data[0])
+
+    def validate_pick2_artist(self, pick2_artist):
+      self.check_pick(2, self.pick2_artist.raw_data[0], self.pick2_title.raw_data[0], self.pick2_link.raw_data[0])
+      self.check_submit(2)
+
+    def validate_pick2_title(self, pick2_title):
+      self.check_pick(2, self.pick2_artist.raw_data[0], self.pick2_title.raw_data[0], self.pick2_link.raw_data[0])
+      self.check_submit(2)
+
+    def validate_pick2_link(self, pick2_link):
+      self.check_pick(2, self.pick2_artist.raw_data[0], self.pick2_title.raw_data[0], self.pick2_link.raw_data[0])
+      self.check_submit(2)
+
+    def validate_pick3_artist(self, pick3_artist):
+      self.check_pick(3, self.pick3_artist.raw_data[0], self.pick3_title.raw_data[0], self.pick3_link.raw_data[0])
+      self.check_submit(3)
+
+    def validate_pick3_title(self, pick3_title):
+      self.check_pick(3, self.pick3_artist.raw_data[0], self.pick3_title.raw_data[0], self.pick3_link.raw_data[0])
+      self.check_submit(3)
+
+    def validate_pick3_link(self, pick3_link):
+      self.check_pick(3, self.pick3_artist.raw_data[0], self.pick3_title.raw_data[0], self.pick3_link.raw_data[0])
+      self.check_submit(3)
+
+    def validate_pick4_artist(self, pick4_artist):
+      self.check_pick(4, self.pick4_artist.raw_data[0], self.pick4_title.raw_data[0], self.pick4_link.raw_data[0])
+      self.check_submit(4)
+
+    def validate_pick4_title(self, pick4_title):
+      self.check_pick(4, self.pick4_artist.raw_data[0], self.pick4_title.raw_data[0], self.pick4_link.raw_data[0])
+      self.check_submit(4)
+
+    def validate_pick4_link(self, pick4_link):
+      self.check_pick(4, self.pick4_artist.raw_data[0], self.pick4_title.raw_data[0], self.pick4_link.raw_data[0])
+      self.check_submit(4)
+
+  pick_status = {}
+  pick_messages = {}
+
+  # maybe the number of picks can be variable in the future
+  # for now, hard-code 4 picks
+  for pick_num in range(1, 5):
+    existing_pick = get_pick(current_user.id, event.id, pick_num)
+
+    if existing_pick:
+      pick_status[pick_num] = existing_pick.approved
+      pick_messages[pick_num] = existing_pick.approval_message
+    else:
+      pick_status[pick_num] = 'BLANK'
+      pick_messages[pick_num] = ''
+
+    # build form
+    song_artist = StringField(f'Pick {pick_num} Artist', validators=[], default=None if existing_pick == None else existing_pick.artist)
+    song_title = StringField(f'Pick {pick_num} Title', validators=[], default=None if existing_pick == None else existing_pick.title)
+    song_link = StringField(f'Pick {pick_num} Link', validators=[], default=None if existing_pick == None else existing_pick.link)
+    setattr(NominationForm, f'pick{pick_num}_artist', song_artist)
+    setattr(NominationForm, f'pick{pick_num}_title', song_title)
+    setattr(NominationForm, f'pick{pick_num}_link', song_link)
+
+  setattr(NominationForm, 'submit', SubmitField('Submit'))
+  form = NominationForm()
+
+  if form.validate_on_submit():
+    for pick_num in range(1, 5):
+      edit_nomination(
+        user_id=current_user.id,
+        event_id=event.id,
+        artist=form[f'pick{pick_num}_artist'].raw_data[0],
+        title=form[f'pick{pick_num}_title'].raw_data[0],
+        link=form[f'pick{pick_num}_link'].raw_data[0],
+        pick_num=pick_num
+      )
+    flash('Submission received.')
+    return redirect(url_for('nominate', event_slug=event_slug))
+  else:
+    return render_template('nominate.html', title=f'Nominations for {event.name}', 
+      active_rounds=get_active_rounds(), recent_rounds=get_recent_rounds(), active_nominations=get_active_nominations(),
+      form=form, pick_status=pick_status, pick_messages=pick_messages)

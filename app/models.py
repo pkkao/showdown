@@ -33,6 +33,7 @@ class Event(db.Model):
   id: so.Mapped[int] = so.mapped_column(primary_key=True)
   event_slug: so.Mapped[str] = so.mapped_column(sa.String(256), index=True, unique=True) # wi27-music
   name: so.Mapped[str] = so.mapped_column(sa.String(256), index=True, unique=True) # Winter 2027 Music Showdown
+  pick_deadline: so.Mapped[datetime] = so.mapped_column(sa.DateTime())
 
   rounds: so.WriteOnlyMapped['Round'] = so.relationship(back_populates='event')
   songs: so.WriteOnlyMapped['Song'] = so.relationship(back_populates='event')
@@ -53,9 +54,13 @@ class Song(db.Model):
   id: so.Mapped[int] = so.mapped_column(primary_key=True)
   user_id: so.Mapped[int] = so.mapped_column(sa.ForeignKey(User.id), index=True)
   event_id: so.Mapped[int] = so.mapped_column(sa.ForeignKey(Event.id), index=True)
-  artist: so.Mapped[str] = so.mapped_column(sa.String(256), index=True, unique=True)
-  title: so.Mapped[str] = so.mapped_column(sa.String(256), index=True, unique=True)
-  link: so.Mapped[str] = so.mapped_column(sa.String(256), index=True, unique=True)
+  artist: so.Mapped[str] = so.mapped_column(sa.String(256), index=True)
+  title: so.Mapped[str] = so.mapped_column(sa.String(256), index=True)
+  link: so.Mapped[str] = so.mapped_column(sa.String(256), index=True)
+  pick_num: so.Mapped[int] = so.mapped_column(index=True)
+  pick_time: so.Mapped[datetime] = so.mapped_column(sa.DateTime())
+  approved: so.Mapped[str] = so.mapped_column(sa.String(256), index=True)
+  approval_message: so.Mapped[str] = so.mapped_column(sa.String(1024))
 
   user: so.Mapped['User'] = so.relationship(back_populates='songs')
   event: so.Mapped['Event'] = so.relationship(back_populates='songs')

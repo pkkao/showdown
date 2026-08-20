@@ -24,7 +24,7 @@ def upgrade():
                nullable=False)
 
     with op.batch_alter_table('vote', schema=None) as batch_op:
-        batch_op.add_column(sa.Column('is_tiebreaker', sa.Boolean(), nullable=False))
+        batch_op.add_column(sa.Column('is_tiebreaker', sa.Boolean(), nullable=True))
 
     # ### end Alembic commands ###
 
