@@ -1030,6 +1030,9 @@ def nominate(event_slug):
   form = NominationForm()
 
   if form.validate_on_submit():
+    if datetime.now() > event.pick_deadline:
+      flash(f'Nominations for {event.name} are closed and cannot be changed.')
+      return redirect(url_for('nominate', event_slug=event_slug))
     for pick_num in range(1, 5):
       edit_nomination(
         user_id=current_user.id,

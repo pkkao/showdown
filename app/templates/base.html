@@ -64,15 +64,12 @@
 
       {% with messages = get_flashed_messages() %}
         {% if messages %}
-        <ul>
           {% for message in messages %}
-            <li>{{ message }}</li>
+            <br>
+            <div class="alert alert-info" role="alert">{{ message }}</div>
           {% endfor %}
-        </ul>
         {% endif %}
       {% endwith %}
-
-      <hr>
 
       <script>
       // https://www.w3schools.com/howto/howto_js_countdown.asp
@@ -127,15 +124,14 @@
             [Pick statuses:
             {% for pick in nomination.pick_status %}
               {% if nomination.pick_status[pick] == "APPROVED" %}
-              <div style="display: inline; color: green;">APPROVED</div>
+              <span class="badge badge-pill bg-success badge-success">Approved</span>
               {% elif nomination.pick_status[pick] == "REJECTED" %}
-              <div style="display: inline; color: red;">REJECTED</div>
+              <span class="badge badge-pill bg-danger badge-danger">Rejected</span>
               {% elif nomination.pick_status[pick] == "PENDING" %}
-              <div style="display: inline; color: orange;">PENDING</div>
+              <span class="badge badge-pill bg-warning badge-warning">Pending</span>
               {% elif nomination.pick_status[pick] == "BLANK" %}
-              <div style="display: inline; color: gray;">BLANK</div>
+              <span class="badge badge-pill bg-secondary badge-secondary">Blank</span>
               {% endif %}
-              {{", " if not loop.last}}
             {% endfor %}
             ]
           {% else %}

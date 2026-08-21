@@ -1,3 +1,5 @@
+{% import "bootstrap_wtf.html" as wtf %}
+
 {% extends "base.html" %}
 
 {% block content %}
@@ -16,11 +18,11 @@
         {{ user }}:
         {% for pick in all_pick_statuses[user] %}
           {% if all_pick_statuses[user][pick] == "APPROVED" %}
-          <div style="display: inline; color: green;">APPROVED</div>{{", " if not loop.last}}
+          <span class="badge badge-pill bg-success badge-success">Approved</span>
           {% elif all_pick_statuses[user][pick] == "REJECTED" %}
-          <div style="display: inline; color: red;">REJECTED</div>{{", " if not loop.last}}
+          <span class="badge badge-pill bg-danger badge-danger">Rejected</span>
           {% elif all_pick_statuses[user][pick] == "PENDING" %}
-          <div style="display: inline; color: orange;">PENDING</div>{{", " if not loop.last}}
+          <span class="badge badge-pill bg-warning badge-warning">Pending</span>
           {% endif %}
         {% endfor %}
       </li>
@@ -30,41 +32,33 @@
 
   <br><br>
 
+  {% set at_least_one_approved = namespace(at_least_one_approved=false) %}
+
   Your picks:
   <ul>
   {% for pick in pick_status %}
     <li>
       {% if pick_status[pick] == "APPROVED" %}
-      <div style="color: green;">Pick {{ pick }} is APPROVED.</div>
+        <span class="badge badge-pill bg-success badge-success">Pick {{ pick }} is approved.</span>
+        {% set at_least_one_approved.at_least_one_approved = true %}
       {% elif pick_status[pick] == "REJECTED" %}
-      <div style="color: red;">Pick {{ pick }} is REJECTED.</div>
+        <span class="badge badge-pill bg-danger badge-danger">Pick {{ pick }} is rejected.</span>
       {% elif pick_status[pick] == "PENDING" %}
-      <div style="color: orange;">Pick {{ pick }} is PENDING.</div>
+        <span class="badge badge-pill bg-warning badge-warning">Pick {{ pick }} is pending.</span>
       {% elif pick_status[pick] == "BLANK" %}
-      <div style="color: gray;">Pick {{ pick }} is BLANK.</div>
+        <span class="badge badge-pill bg-secondary badge-secondary">Pick {{ pick }} is blank.</span>
       {% endif %}
       {% if pick_messages[pick] != "" %}
-      [Message from admin: {{ pick_messages[pick] }}]
+        [Message from admin: {{ pick_messages[pick] }}]
       {% endif %}
     </li>
   {% endfor %}
   </ul>
 
-  <form action="" method="POST" onsubmit="return confirm('Are you sure? If you edited an approved pick, it must be re-approved.')" novalidate>
-    {{ form.hidden_tag() }}
-    
-    {% for field in form %}
-      <p>
-        {% if field.type == "StringField" %}
-          {{ field.label }}<br>{{ field(size=48) }}
-          {% for error in field.errors %}
-            <span style="color: red;">[{{ error }}]</span><br><br>
-          {% endfor %}
-        {% endif %}
-      </p>
-    {% endfor %}
-
-    {{ form.submit() }}
-  </form>
+  {% if at_least_one_approved.at_least_one_approved == true %}
+    {{ wtf.quick_form(form, onsubmit="return confirm('Are you sure? If you edited an approved pick, it must be re-approved.')") }}
+  {% else %}
+    {{ wtf.quick_form(form) }}
+  {% endif %}
 
 {% endblock %}
