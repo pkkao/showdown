@@ -18,6 +18,7 @@ from urllib.parse import urlsplit
 import re
 from markupsafe import Markup
 import random
+from wonderwords import RandomWord
 
 # By default, get any rounds that ended in the last 48 hours.
 def get_recent_rounds(delta = timedelta(hours=48)):
@@ -665,6 +666,8 @@ def populate_first_round():
 def index():
   if current_user.is_authenticated:
     un = f'You are: {current_user.username}'
+    if not current_user.is_verified:
+      un += f' and you need to post the code "{current_user.verify_code}" on the NHC to prove it\'s really you.'
   else:
     un = 'You are: Anonymous'
   return render_template('debug.html', debug=un, 
@@ -702,9 +705,12 @@ def register():
   if form.validate_on_submit():
     user = User(username=form.username.data, email=form.email.data)
     user.set_password(form.password.data)
+    r = RandomWord()
+    user.verify_code = f'{r.word()}-{r.word()}-{r.word()}'
+    user.is_verified = False
     db.session.add(user)
     db.session.commit()
-    flash(f'Registered as {user.username}')
+    flash(f'Registered as {user.username}. To activate your account, prove it\'s you by posting the code "{user.verify_code}" on the NHC.')
     return redirect(url_for('login'))
   return render_template('register.html', title='Register', form=form,
     active_rounds=get_active_rounds(), recent_rounds=get_recent_rounds(), active_nominations=get_active_nominations())
@@ -717,6 +723,10 @@ def register():
 @app.route('/vote/<event_slug>/<round_slug>/', methods=['GET', 'POST'])
 @login_required
 def vote(event_slug, round_slug):
+
+  if not current_user.is_verified:
+    flash(f'To activate your account, prove it\'s you by posting the code "{current_user.verify_code}" on the NHC.')
+    return redirect(url_for('index'))
 
   # Attempt to populate before showing "unreleased" - so that when a round opens, somebody
   # can actually populate it.
@@ -913,6 +923,11 @@ def get_pick(user_id, event_id, pick_num):
 @app.route('/nominate/<event_slug>/', methods=['GET', 'POST'])
 @login_required
 def nominate(event_slug):
+  
+  if not current_user.is_verified:
+    flash(f'To activate your account, prove it\'s you by posting the code "{current_user.verify_code}" on the NHC.')
+    return redirect(url_for('index'))
+
   # This 404s if you try to submit noms for a nonexistent event. Cool.
   event = get_event(event_slug)
 

@@ -1,8 +1,8 @@
-"""initial commit
+"""first commit
 
-Revision ID: a290275b0dfd
+Revision ID: 24db68a1ce0c
 Revises: 
-Create Date: 2026-08-20 02:07:49.895749
+Create Date: 2026-08-20 21:14:37.702646
 
 """
 from alembic import op
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision = 'a290275b0dfd'
+revision = '24db68a1ce0c'
 down_revision = None
 branch_labels = None
 depends_on = None
@@ -34,6 +34,8 @@ def upgrade():
     sa.Column('username', sa.String(length=256), nullable=False),
     sa.Column('email', sa.String(length=256), nullable=False),
     sa.Column('password_hash', sa.String(length=256), nullable=True),
+    sa.Column('verify_code', sa.String(length=256), nullable=False),
+    sa.Column('is_verified', sa.Boolean(), nullable=False),
     sa.PrimaryKeyConstraint('id', name=op.f('pk_user'))
     )
     with op.batch_alter_table('user', schema=None) as batch_op:
@@ -66,7 +68,7 @@ def upgrade():
     sa.Column('pick_num', sa.Integer(), nullable=False),
     sa.Column('pick_time', sa.DateTime(), nullable=False),
     sa.Column('approved', sa.String(length=256), nullable=False),
-    sa.Column('approval_message', sa.String(length=1024), nullable=False),
+    sa.Column('approval_message', sa.String(length=1024), nullable=True),
     sa.ForeignKeyConstraint(['event_id'], ['event.id'], name=op.f('fk_song_event_id_event')),
     sa.ForeignKeyConstraint(['user_id'], ['user.id'], name=op.f('fk_song_user_id_user')),
     sa.PrimaryKeyConstraint('id', name=op.f('pk_song'))

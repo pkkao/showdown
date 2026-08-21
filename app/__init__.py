@@ -48,6 +48,10 @@ class AdminModelView(ModelView):
     # redirect to login page if user doesn't have access
     return 'Sorry, admin page is not for you.'
 
+class AdminUserModelView(AdminModelView):
+  column_exclude_list = ['password_hash', ]
+  column_editable_list = ['is_verified']
+
 class AdminSongModelView(AdminModelView):
   # just to show a demo of using admin panel directly to vet picks
   # in practice, I'll probably export the table to gsheets for the host to vet picks
@@ -67,7 +71,7 @@ class AdminEventModelView(AdminModelView):
 
 
 from app.models import User, Event, Round, Song, Match, Vote, Candidate
-admin.add_view(AdminModelView(User, db.session))
+admin.add_view(AdminUserModelView(User, db.session))
 admin.add_view(AdminEventModelView(Event, db.session))
 admin.add_view(AdminModelView(Round, db.session))
 admin.add_view(AdminSongModelView(Song, db.session))

@@ -15,6 +15,8 @@ class User(UserMixin, db.Model):
   # thinking of temp hacking this as like ryan@nohomers.net
   email: so.Mapped[str] = so.mapped_column(sa.String(256), index=True, unique=True)
   password_hash: so.Mapped[Optional[str]] = so.mapped_column(sa.String(256))
+  verify_code: so.Mapped[str] = so.mapped_column(sa.String(256))
+  is_verified: so.Mapped[bool] = so.mapped_column(default=False)
 
   songs: so.WriteOnlyMapped['Song'] = so.relationship(back_populates='user')
 
