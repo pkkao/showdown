@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-bs-theme="dark">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -7,6 +7,9 @@
       href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css"
       rel="stylesheet"
       integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
+
+    {# stolen from https://albertoroura.com/building-a-theme-switcher-for-bootstrap/ #}
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css" rel="stylesheet">
 
     <title>{{ title }}</title>
 
@@ -39,6 +42,20 @@
               Logged in as {{ current_user.username }}
             </span>
           {% endif %}
+
+          {# stolen from https://albertoroura.com/building-a-theme-switcher-for-bootstrap/ #}
+          <div class="mode-switch">
+            <button title="Use dark mode" id="dark" class="btn btn-sm btn-default text-secondary">
+              <i class="bi bi-moon"></i>
+            </button>
+            <button title="Use light mode" id="light" class="btn btn-sm btn-default text-secondary">
+              <i class="bi bi-sun"></i>
+            </button>
+            <button title="Use system preferred mode" id="system" class="btn btn-sm btn-default text-secondary">
+              <i class="bi bi-display"></i>
+            </button>
+          </div>
+
         </div>
       </div>
     </nav>
@@ -104,7 +121,7 @@
         <div class="alert alert-primary" role="alert">
           {{ nomination.name }} Sign-Ups: <b><div id="{{ nomination.event_slug }}" style="display: inline"></div></b>
 
-          <a class="btn btn-outline-dark" href="{{ url_for('nominate', event_slug=nomination.event_slug) }}">submit picks</a>
+          <a class="btn btn-outline-secondary" href="{{ url_for('nominate', event_slug=nomination.event_slug) }}">submit picks</a>
 
           {% if current_user.is_authenticated %}
             [Pick statuses:
@@ -147,9 +164,9 @@
             <a class="btn btn-outline-secondary" href="{{ url_for('login') }}">Log in to check if you voted.</a>
           {% endif %}
 
-          <a class="btn btn-outline-dark" href="{{ url_for('vote', event_slug=round.event_slug, round_slug=round.round_slug) }}">submit votes</a>
+          <a class="btn btn-outline-secondary" href="{{ url_for('vote', event_slug=round.event_slug, round_slug=round.round_slug) }}">submit votes</a>
 
-          <a class="btn btn-outline-dark" href="{{ url_for('results', event_slug=round.event_slug, round_slug=round.round_slug) }}">see results</a>
+          <a class="btn btn-outline-secondary" href="{{ url_for('results', event_slug=round.event_slug, round_slug=round.round_slug) }}">see results</a>
 
           <script>setCountDown("{{ round.slug }}", "{{ round.end_time }}")</script>
         </div>
@@ -160,11 +177,11 @@
           {{ round.name }}: Results are up. 
 
           {% if current_user.is_authenticated and round.needs_tiebreaker and not round.did_you_start %}
-            <a class="btn btn-outline-dark" href="{{ url_for('vote', event_slug=round.event_slug, round_slug=round.round_slug) }}">submit votes</a>
+            <a class="btn btn-outline-secondary" href="{{ url_for('vote', event_slug=round.event_slug, round_slug=round.round_slug) }}">submit votes</a>
 
-            <a class="btn btn-outline-dark" href="{{ url_for('results', event_slug=round.event_slug, round_slug=round.round_slug) }}">see results</a>
+            <a class="btn btn-outline-secondary" href="{{ url_for('results', event_slug=round.event_slug, round_slug=round.round_slug) }}">see results</a>
           {% else %}
-            <a class="btn btn-outline-dark" href="{{ url_for('results', event_slug=round.event_slug, round_slug=round.round_slug) }}">see results</a>
+            <a class="btn btn-outline-secondary" href="{{ url_for('results', event_slug=round.event_slug, round_slug=round.round_slug) }}">see results</a>
           {% endif %}          
 
           {% if round.needs_tiebreaker %}
@@ -182,5 +199,29 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js" integrity="sha384-FKyoEForCGlyvwx9Hj09JcYn3nv7wiPVlz7YYwJrWVcXK/BmnVDxM+D2scQbITxI" crossorigin="anonymous"></script>
+
+    {# stolen from https://albertoroura.com/building-a-theme-switcher-for-bootstrap/ #}
+    <script>
+      function setTheme (mode = 'auto') {
+        const userMode = localStorage.getItem('bs-theme');
+        const sysMode = window.matchMedia('(prefers-color-scheme: light)').matches;
+        const useSystem = mode === 'system' || (!userMode && mode === 'auto');
+        const modeChosen = useSystem ? 'system' : mode === 'dark' || mode === 'light' ? mode : userMode;
+
+        if (useSystem) {
+          localStorage.removeItem('bs-theme');
+        } else {
+          localStorage.setItem('bs-theme', modeChosen);
+        }
+
+        document.documentElement.setAttribute('data-bs-theme', useSystem ? (sysMode ? 'light' : 'dark') : modeChosen);
+        document.querySelectorAll('.mode-switch .btn').forEach(e => e.classList.remove('text-body'));
+        document.getElementById(modeChosen).classList.add('text-body');
+      }
+
+      setTheme();
+      document.querySelectorAll('.mode-switch .btn').forEach(e => e.addEventListener('click', () => setTheme(e.id)));
+      window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', () => setTheme());
+    </script>
   </body>
 </html>
