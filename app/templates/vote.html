@@ -1,3 +1,5 @@
+{% import "bootstrap_wtf.html" as wtf %}
+
 {% extends "base.html" %}
 
 {% block content %}
@@ -12,32 +14,24 @@
     <p>You have not started voting yet.</p>
   {% endif %}
 
-  {% if round_over %}
-  <form action="" method="POST" onsubmit="return confirm('Are you sure? This will immediately end the round, and you cannot edit your tiebreak votes.')" novalidate>
-  {% else %}
-  <form action="" method="POST" novalidate>
-  {% endif %}
-    {{ form.hidden_tag() }}
-    
-    {% for field in form %}
-        {% if field.type == "RadioField" %}
-          {{ field.label|safe }}{{ field|safe }}
-          {% for error in field.errors %}
-            <span style="color: red;">[{{ error }}]</span><br><br>
-          {% endfor %}
-        {% endif %}
-    {% endfor %}
+  
 
-    {{ form.submit() }}
-  </form>
+  {% if round_over %}
+  <div class="col-md-6">
+    {{ wtf.quick_form(form, onsubmit="return confirm('Are you sure? This will immediately end the round, and you cannot edit your tiebreak votes.')") }}
+  </div>
+  {% else %}
+    {{ wtf.quick_form(form) }}
+  {% endif %}
 
   <br><br><br>
   <details>
     <summary>Danger zone: Delete my votes for this round (click to expand)</summary>
 
     <form action="./delete-votes/" method="POST" onsubmit="return confirm('Are you sure? Once I delete your votes, I can never get them back.')">
-      <button name="delete-votes">Delete my votes</button>
+      <button class="btn btn-danger" name="delete-votes">Delete my votes</button>
     </form>
   </details>
+  <br><br>
 
 {% endblock %}

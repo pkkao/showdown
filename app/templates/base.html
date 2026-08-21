@@ -1,86 +1,110 @@
 <!doctype html>
-<html>
+<html lang="en">
   <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+      integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
+
     <title>{{ title }}</title>
+
+
   </head>
   <body>
-    <div>
-      NHC Music Showdown / 
-      {% if current_user.is_authenticated %}
-      Logged in as {{ current_user.username }} / 
-      {% endif %}
-      <a href="{{ url_for('index') }}">Home</a>
-      {% if current_user.is_anonymous %}
-        / <a href="{{ url_for('login') }}">Login</a>
-      {% else %}
-        / <a href="{{ url_for('logout') }}">Logout</a>
-      {% endif %}
-    </div>
 
-    {% with messages = get_flashed_messages() %}
-      {% if messages %}
-      <ul>
-        {% for message in messages %}
-          <li>{{ message }}</li>
-        {% endfor %}
-      </ul>
-      {% endif %}
-    {% endwith %}
+    <nav class="navbar navbar-expand-lg bg-body-tertiary">
+      <div class="container">
+        <a class="navbar-brand" href="{{ url_for('index') }}">NHC Music Showdown</a>
 
-    <hr>
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarSupportedContent" aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
+          <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="navbarSupportedContent">
+          <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+            
+            <li class="nav-item">
+              {% if current_user.is_anonymous %}
+                <a class="nav-link" href="{{ url_for('login') }}">Login</a>
+              {% else %}
+                <a class="nav-link" href="{{ url_for('logout') }}">Logout</a>
+              {% endif %}
+            </li>
 
-    <script>
-    // https://www.w3schools.com/howto/howto_js_countdown.asp
-    // with modification
+          </ul>
 
-    function countDown(slug, countDownDate) {
+          {% if current_user.is_authenticated %}
+            <span class="d-flex navbar-text">
+              Logged in as {{ current_user.username }}
+            </span>
+          {% endif %}
+        </div>
+      </div>
+    </nav>
 
-      // Get today's date and time
-      var now = new Date().getTime();
-        
-      // Find the distance between now and the count down date
-      var distance = countDownDate - now;
-        
-      // Time calculations for days, hours, minutes and seconds
-      var days = Math.floor(distance / (1000 * 60 * 60 * 24));
-      var hours = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-      var minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
-      var seconds = Math.floor((distance % (1000 * 60)) / 1000);
-        
-      // Output the result in an element with id="demo"
-      document.getElementById(slug).innerHTML = days + "d " + hours + "h "
-      + minutes + "m " + seconds + "s remaining";
-        
-      // If the count down is over, write some text 
-      if (distance < 0) {
-        //clearInterval(x);
-        document.getElementById(slug).innerHTML = 'Round over. <a href="javascript:window.location.reload(true)">Refresh the page</a> to see results.';
+    <div class="container">
+
+      {% with messages = get_flashed_messages() %}
+        {% if messages %}
+        <ul>
+          {% for message in messages %}
+            <li>{{ message }}</li>
+          {% endfor %}
+        </ul>
+        {% endif %}
+      {% endwith %}
+
+      <hr>
+
+      <script>
+      // https://www.w3schools.com/howto/howto_js_countdown.asp
+      // with modification
+
+      function countDown(slug, countDownDate) {
+
+        // Get today's date and time
+        var now = new Date().getTime();
+          
+        // Find the distance between now and the count down date
+        var distance = countDownDate - now;
+          
+        // Time calculations for days, hours, minutes and seconds
+        var days = Math.floor(distance / (1000 * 60 * 60 * 24));
+        var hours = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+        var minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
+        var seconds = Math.floor((distance % (1000 * 60)) / 1000);
+          
+        // Output the result in an element with id="demo"
+        document.getElementById(slug).innerHTML = days + "d " + hours + "h "
+        + minutes + "m " + seconds + "s remaining";
+          
+        // If the count down is over, write some text 
+        if (distance < 0) {
+          //clearInterval(x);
+          document.getElementById(slug).innerHTML = 'Round over. <a href="javascript:window.location.reload(true)">Refresh the page</a> to see results.';
+        }
       }
-    }
 
-    function setCountDown(slug, countDownDate) {
-      // Set the date we're counting down to
-      var countDownDate = new Date(countDownDate).getTime();
+      function setCountDown(slug, countDownDate) {
+        // Set the date we're counting down to
+        var countDownDate = new Date(countDownDate).getTime();
 
-      // Call once on load
-      countDown(slug, countDownDate);
+        // Call once on load
+        countDown(slug, countDownDate);
 
-      // Update the count down every 1 second
-      var x = setInterval(countDown, 1000, slug, countDownDate);
-    }
-    </script>
+        // Update the count down every 1 second
+        var x = setInterval(countDown, 1000, slug, countDownDate);
+      }
+      </script>
 
-    <br>
-    Ongoing sign-ups:
-    <ul>
-      {% if active_nominations|length == 0 %}
-        <li>None</li>
-      {% endif %}
+      <br>
+
       {% for nomination in active_nominations %}
-        <li>
+        <div class="alert alert-primary" role="alert">
           {{ nomination.name }} Sign-Ups: <b><div id="{{ nomination.event_slug }}" style="display: inline"></div></b>
 
-          [<a href="{{ url_for('nominate', event_slug=nomination.event_slug) }}">submit picks</a>]
+          <a class="btn btn-outline-dark" href="{{ url_for('nominate', event_slug=nomination.event_slug) }}">submit picks</a>
 
           {% if current_user.is_authenticated %}
             [Pick statuses:
@@ -98,72 +122,65 @@
             {% endfor %}
             ]
           {% else %}
-            <div style="display: inline; color: gray">[<a href="{{ url_for('login') }}">Log in</a> to check if your picks were approved.]</div>
+            <a class="btn btn-outline-secondary" href="{{ url_for('login') }}">Log in to check if your picks were approved.</a>
           {% endif %}
 
           <script>setCountDown("{{ nomination.event_slug }}", "{{ nomination.pick_deadline }}")</script>
-        </li>
+        </div>
       {% endfor %}
-    </ul>
+      
 
-    <br>
-    Ongoing rounds:
-    <ul>
-      {% if active_rounds|length == 0 %}
-        <li>None</li>
-      {% endif %}
       {% for round in active_rounds %}
-        <li>
-          {{ round.name }}: <b><div id="{{ round.slug }}" style="display: inline"></div></b>
-
-          [<a href="{{ url_for('vote', event_slug=round.event_slug, round_slug=round.round_slug) }}">submit votes</a> / <a href="{{ url_for('results', event_slug=round.event_slug, round_slug=round.round_slug) }}">see results</a>]
+        <div class="alert alert-primary" role="alert">
+          
+          {{ round.name }}: <b><div id="{{ round.slug }}" style="display: inline"></div></b> to vote.
 
           {% if current_user.is_authenticated %}
             {% if round.did_you_finish %}
-              <div style="display: inline; color: green">[You finished voting.]</div>
+              <span class="badge badge-pill bg-success badge-success">You finished voting.</span>
             {% elif round.did_you_start %}
-              <div style="display: inline; color: orange">[Your votes are half-finished.]</div>
+              <span class="badge badge-pill bg-warning badge-warning">Your votes are half-finished.</span>
             {% else %}
-              <div style="display: inline; color: red">[You didn't vote yet.]</div>
+              <span class="badge badge-pill bg-danger badge-danger">You didn't vote yet.</span>
             {% endif %}
           {% else %}
-            <div style="display: inline; color: gray">[<a href="{{ url_for('login') }}">Log in</a> to check if you voted.]</div>
+            <a class="btn btn-outline-secondary" href="{{ url_for('login') }}">Log in to check if you voted.</a>
           {% endif %}
+
+          <a class="btn btn-outline-dark" href="{{ url_for('vote', event_slug=round.event_slug, round_slug=round.round_slug) }}">submit votes</a>
+
+          <a class="btn btn-outline-dark" href="{{ url_for('results', event_slug=round.event_slug, round_slug=round.round_slug) }}">see results</a>
 
           <script>setCountDown("{{ round.slug }}", "{{ round.end_time }}")</script>
-        </li>
+        </div>
       {% endfor %}
-    </ul>
-    <br>
-    
-    Recently-finished rounds:
-    <ul>
-      {% if recent_rounds|length == 0 %}
-        <li>None</li>
-      {% endif %}
+      
       {% for round in recent_rounds %}
-        <li>
-          {{ round.name }}
+        <div class="alert alert-primary" role="alert">
+          {{ round.name }}: Results are up. 
 
           {% if current_user.is_authenticated and round.needs_tiebreaker and not round.did_you_start %}
-            [<a href="{{ url_for('vote', event_slug=round.event_slug, round_slug=round.round_slug) }}">submit votes</a> / <a href="{{ url_for('results', event_slug=round.event_slug, round_slug=round.round_slug) }}">see results</a>]
-          {% else %}
-            [<a href="{{ url_for('results', event_slug=round.event_slug, round_slug=round.round_slug) }}">see results</a>]
-          {% endif %}
+            <a class="btn btn-outline-dark" href="{{ url_for('vote', event_slug=round.event_slug, round_slug=round.round_slug) }}">submit votes</a>
 
-          
+            <a class="btn btn-outline-dark" href="{{ url_for('results', event_slug=round.event_slug, round_slug=round.round_slug) }}">see results</a>
+          {% else %}
+            <a class="btn btn-outline-dark" href="{{ url_for('results', event_slug=round.event_slug, round_slug=round.round_slug) }}">see results</a>
+          {% endif %}          
 
           {% if round.needs_tiebreaker %}
             <b>[Needs tiebreaker for matches {{ round.tiebreaks }}]</b>
           {% endif %}
-        </li>
+        </div>
       {% endfor %}
-    </ul>
 
-    <hr>
+      <hr>
 
-    <h1>{{ title }}</h1>
+      <h1>{{ title }}</h1>
 
-    {% block content %}{% endblock %}
+      {% block content %}{% endblock %}
+
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js" integrity="sha384-FKyoEForCGlyvwx9Hj09JcYn3nv7wiPVlz7YYwJrWVcXK/BmnVDxM+D2scQbITxI" crossorigin="anonymous"></script>
   </body>
 </html>
