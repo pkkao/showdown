@@ -41,8 +41,19 @@ class AdminModelView(ModelView):
   can_export = True
 
   def is_accessible(self):
-    return True # lol just for now
-    #return current_user.username == 'admin'
+    #return True # lol just for now
+    return current_user.is_authenticated and current_user.username == 'peyrin'
+
+  def inaccessible_callback(self, name, **kwargs):
+    # redirect to login page if user doesn't have access
+    return 'Sorry, admin page is not for you.'
+
+class HostModelView(ModelView):
+  can_export = False
+
+  def is_accessible(self):
+    #return True # lol just for now
+    return current_user.is_authenticated and current_user.username == 'oboopa staloopa' # replace with username of host
 
   def inaccessible_callback(self, name, **kwargs):
     # redirect to login page if user doesn't have access
@@ -53,10 +64,21 @@ class AdminUserModelView(AdminModelView):
   column_editable_list = ['is_verified']
 
 class AdminSongModelView(AdminModelView):
-  # just to show a demo of using admin panel directly to vet picks
-  # in practice, I'll probably export the table to gsheets for the host to vet picks
+  column_editable_list = ['approved', 'approval_message']
+
+class HostSongModelView(HostModelView):
   column_exclude_list = ['user', ]
   column_editable_list = ['approved', 'approval_message']
+  can_delete = False
+  form_edit_rules = ('event', 'artist', 'title', 'link', 'pick_time', 'pick_num', 'approved', 'approval_message')
+  form_widget_args = {
+    'event': {'disabled': True},
+    'artist': {'disabled': True},
+    'title': {'disabled': True},
+    'link': {'disabled': True},
+    'pick_time': {'disabled': True},
+    'pick_num': {'disabled': True},
+  }
 
 class AdminEventModelView(AdminModelView):
   column_editable_list = ['pick_deadline']
@@ -75,6 +97,7 @@ admin.add_view(AdminUserModelView(User, db.session))
 admin.add_view(AdminEventModelView(Event, db.session))
 admin.add_view(AdminModelView(Round, db.session))
 admin.add_view(AdminSongModelView(Song, db.session))
+admin.add_view(HostSongModelView(Song, db.session, name='Approve Picks', endpoint='approve-picks'))
 admin.add_view(AdminModelView(Match, db.session))
 admin.add_view(AdminModelView(Vote, db.session))
 admin.add_view(AdminModelView(Candidate, db.session))
