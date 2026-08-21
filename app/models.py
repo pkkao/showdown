@@ -31,7 +31,6 @@ class User(UserMixin, db.Model):
 def load_user(id):
   return db.session.get(User, int(id))
 
-@dataclass
 class Event(db.Model):
   id: so.Mapped[int] = so.mapped_column(primary_key=True)
   event_slug: so.Mapped[str] = so.mapped_column(sa.String(256), index=True, unique=True) # wi27-music
@@ -64,7 +63,7 @@ class Round(db.Model):
   next_round: so.Mapped['Round | None'] = so.relationship('Round', back_populates='prev_rounds', remote_side=[id])
 
   def __str__(self):
-    return f'{self.event_slug}-{self.round_slug}'
+    return f'{self.event.event_slug}-{self.round_slug}'
 
 @dataclass
 class Song(db.Model):

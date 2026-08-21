@@ -5,7 +5,6 @@ from sqlalchemy import MetaData
 from flask_migrate import Migrate
 from flask_login import LoginManager
 from flask_admin import Admin
-from flask_admin.contrib.sqla import ModelView
 
 app = Flask(__name__)
 app.config.from_object(Config)
@@ -34,6 +33,8 @@ from app import routes, models
 #########
 
 from flask_login import current_user
+from flask_admin.form import TimeField
+from flask_admin.contrib.sqla import ModelView
 
 class AdminModelView(ModelView):
 
@@ -48,16 +49,26 @@ class AdminModelView(ModelView):
     return 'Sorry, admin page is not for you.'
 
 class AdminSongModelView(AdminModelView):
-
   # just to show a demo of using admin panel directly to vet picks
   # in practice, I'll probably export the table to gsheets for the host to vet picks
   column_exclude_list = ['user', ]
   column_editable_list = ['approved', 'approval_message']
 
+class AdminEventModelView(AdminModelView):
+  column_editable_list = ['pick_deadline']
+  form_overrides = {
+    'Pick Deadline': TimeField
+  }
+  form_args = {
+    'Pick Deadline': {
+      'format': '%Y-%m-%d %H:%M:%S'
+    }
+  }
+
 
 from app.models import User, Event, Round, Song, Match, Vote, Candidate
 admin.add_view(AdminModelView(User, db.session))
-admin.add_view(AdminModelView(Event, db.session))
+admin.add_view(AdminEventModelView(Event, db.session))
 admin.add_view(AdminModelView(Round, db.session))
 admin.add_view(AdminSongModelView(Song, db.session))
 admin.add_view(AdminModelView(Match, db.session))

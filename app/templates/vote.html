@@ -31,4 +31,13 @@
     {{ form.submit() }}
   </form>
 
+  <br><br><br>
+  <details>
+    <summary>Danger zone: Delete my votes for this round (click to expand)</summary>
+
+    <form action="./delete-votes/" method="POST" onsubmit="return confirm('Are you sure? Once I delete your votes, I can never get them back.')">
+      <button name="delete-votes">Delete my votes</button>
+    </form>
+  </details>
+
 {% endblock %}

@@ -714,7 +714,7 @@ def register():
 # VOTE ROUTES #
 ###############
 
-@app.route('/vote/<event_slug>/<round_slug>', methods=['GET', 'POST'])
+@app.route('/vote/<event_slug>/<round_slug>/', methods=['GET', 'POST'])
 @login_required
 def vote(event_slug, round_slug):
 
@@ -812,8 +812,19 @@ def vote(event_slug, round_slug):
       active_rounds=get_active_rounds(), recent_rounds=get_recent_rounds(), active_nominations=get_active_nominations(),
       form=form, did_you_start=did_you_start, did_you_finish=did_you_finish, round_over=round_over)
 
+@app.route('/vote/<event_slug>/<round_slug>/delete-votes/', methods=['POST'])
+def delete_votes(event_slug, round_slug):
+  round = get_round(event_slug, round_slug)
 
-@app.route('/results/<event_slug>/<round_slug>')
+  votes = get_votes_in_round(current_user.id, round.id)
+  for vote in votes:
+    db.session.delete(vote)
+  db.session.commit()
+  
+  flash(f'Votes for {round.event.name} Round {round.round_slug} deleted.')
+  return redirect(url_for('vote', event_slug=event_slug, round_slug=round_slug))
+
+@app.route('/results/<event_slug>/<round_slug>/')
 def results(event_slug, round_slug):
 
   # Attempt to populate before showing "unreleased" - so that when a round opens, somebody
@@ -899,7 +910,7 @@ def get_pick(user_id, event_id, pick_num):
     return None
 
 
-@app.route('/nominate/<event_slug>', methods=['GET', 'POST'])
+@app.route('/nominate/<event_slug>/', methods=['GET', 'POST'])
 @login_required
 def nominate(event_slug):
   # This 404s if you try to submit noms for a nonexistent event. Cool.
