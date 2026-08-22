@@ -75,6 +75,7 @@ class Song(db.Model):
   artist: so.Mapped[str] = so.mapped_column(sa.String(256), index=True)
   title: so.Mapped[str] = so.mapped_column(sa.String(256), index=True)
   link: so.Mapped[str] = so.mapped_column(sa.String(256), index=True)
+  
   pick_num: so.Mapped[int] = so.mapped_column(index=True)
   pick_time: so.Mapped[datetime] = so.mapped_column(sa.DateTime())
   approved: so.Mapped[str] = so.mapped_column(sa.String(256), index=True)

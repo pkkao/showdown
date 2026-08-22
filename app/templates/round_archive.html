@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+<table id="data" class="table table-striped table-hover">
+  <thead>
+    <tr>
+      <th>Event</th>
+      <th>Round</th>
+      <th>Results</th>
+    </tr>
+  </thead>
+  <tbody class="table-group-divider">
+    {% for round in rounds %}
+      <tr>
+        <td>{{ round.event.name }}</td>
+        <td>{{ "Round %s" | format(round.round_slug) }}</td>
+        <td><a href="{{ "/results/%s/%s/" | format(round.event.event_slug, round.round_slug) }}">Results</a></td>
+      </tr>
+    {% endfor %}
+  </tbody>
+</table>
+<br>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+  $(document).ready(function () {
+    $('#data').DataTable();
+  });
+</script>
+{% endblock %}

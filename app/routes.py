@@ -336,6 +336,10 @@ def populate_round(event_slug, round_slug):
 
   round = get_round(event_slug, round_slug)
 
+  # If round hasn't started yet, do nothing.
+  if round.start_time > datetime.now():
+    return
+
   # Matches for the current round we are trying to populate.
   matches = get_matches(event_slug, round_slug)
 
@@ -1048,3 +1052,55 @@ def nominate(event_slug):
     return render_template('nominate.html', title=f'Nominations for {event.name}', 
       active_rounds=get_active_rounds(), recent_rounds=get_recent_rounds(), active_nominations=get_active_nominations(),
       form=form, pick_status=pick_status, pick_messages=pick_messages, all_pick_statuses=all_pick_statuses)
+
+
+##########################
+# ARCHIVE VIEWING ROUTES #
+##########################
+
+# sometime in the far future, make these tables perform less terribly with something like this
+# https://blog.miguelgrinberg.com/post/beautiful-interactive-tables-for-your-flask-templates
+
+@app.route('/archive/rounds/')
+def round_archive():
+  rounds = Round.query
+
+  return render_template('round_archive.html', title=f'Archive of Rounds', 
+      active_rounds=get_active_rounds(), recent_rounds=get_recent_rounds(), active_nominations=get_active_nominations(),
+      rounds=rounds)
+
+# Find when an event ends, so those songs can be published.
+# This might be slow but whatever.
+def get_event_end_time(event_id):
+  query = db.session.scalar(sa.select(Round, Event)
+    .filter(Event.id == event_id) # pick out the specified event
+    .filter(Event.id == Round.event_id) # table join
+    .order_by(Round.end_time.desc()).limit(1)) # get round with latest end time
+  if query:
+    return query.end_time # round with latest end time
+  else:
+    return None # for weird edge case if an event has no rounds yet, e.g. in debugging
+
+@app.route('/archive/songs/')
+def song_archive():
+  songs = Song.query
+  expired_songs = [] # only show songs whose events have ended
+
+  # some dumb caching
+  event_end_time_cache = {}
+
+  for song in songs:
+    # some dumb caching
+    if song.event_id not in event_end_time_cache:
+      event_end_time = get_event_end_time(song.event_id)
+      event_end_time_cache[song.event_id] = event_end_time
+    else:
+      event_end_time = event_end_time_cache[song.event_id]
+
+    if event_end_time and datetime.now() > event_end_time:
+      expired_songs.append(song)
+
+  return render_template('song_archive.html', title=f'Archive of Songs', 
+      active_rounds=get_active_rounds(), recent_rounds=get_recent_rounds(), active_nominations=get_active_nominations(),
+      songs=expired_songs)
+  

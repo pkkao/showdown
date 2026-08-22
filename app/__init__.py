@@ -46,7 +46,7 @@ class AdminModelView(ModelView):
 
   def inaccessible_callback(self, name, **kwargs):
     # redirect to login page if user doesn't have access
-    return 'Sorry, admin page is not for you.'
+    return 'Sorry, this admin page is not for you.'
 
 class HostModelView(ModelView):
   can_export = False
@@ -57,7 +57,7 @@ class HostModelView(ModelView):
 
   def inaccessible_callback(self, name, **kwargs):
     # redirect to login page if user doesn't have access
-    return 'Sorry, admin page is not for you.'
+    return 'Sorry, this admin page is not for you.'
 
 class AdminUserModelView(AdminModelView):
   column_exclude_list = ['password_hash', ]
