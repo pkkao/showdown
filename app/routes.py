@@ -330,6 +330,58 @@ def get_winning_song(match_id):
     if no_ties:
       return max_song['song']
 
+# Does anyone have to face themselves? If so, how many times?
+# Theorem: You only have to face yourself iff you are >50% of the prev winners.
+# Theorem: If you have k more than 50% of prev_winners, you must face yourself k times.
+# Theorem: At most one person ever has to face themselves.
+def count_face_self(prev_winners):
+  prev_winners_users = {}
+  for u in prev_winners:
+    if u.user_id in prev_winners_users:
+      prev_winners_users[u.user_id] += 1
+    else:
+      prev_winners_users[u.user_id] = 1
+
+  must_face_self = 0
+  for u in prev_winners_users:
+    if prev_winners_users[u] > len(prev_winners) / 2:
+      must_face_self = prev_winners_users[u] - len(prev_winners) / 2
+
+  return must_face_self
+
+def shuffle_winners(prev_winners, len_matches):
+  random.seed(100)
+
+  # Does anyone have to face themselves? If so, how many times?
+  must_face_self = count_face_self(prev_winners)
+
+  # Repeat until the number of people facing themselves matches must_face_self.
+  # If unnecessary facing-self occurs, repeat this loop.
+  face_self_count = 100000
+  while face_self_count > must_face_self:
+    random.shuffle(prev_winners)
+    match_assignments = [[] for _ in range(len_matches)]
+    match_users = [[] for _ in range(len_matches)]
+    face_self_count = 0
+
+    # Attempt to populate each match with a winner from our list of winners.
+    # Round-robin gives each match one song, then each match a second song, and so on.
+    # In theory the rounds and matches-per-round are set up so that
+    # len(list of winners) is exactly equal to the number of songs needed in this round.
+    i = 0
+    while i < len(prev_winners):
+      for m in range(len_matches):
+        match_assignments[m].append(prev_winners[i])
+        match_users[m].append(prev_winners[i].user_id)
+        i += 1
+
+    # How many duplicates across all matches?
+    for m in match_users:
+      face_self_count += len(m) - len(set(m))
+
+  return match_assignments
+
+
 # Attempts to populate matches in the round that has been requested.
 # Checks exist so that this hopefully only happens once per round.
 def populate_round(event_slug, round_slug):
@@ -366,26 +418,16 @@ def populate_round(event_slug, round_slug):
   prev_winners = []
   for (prev_event_slug, prev_round_slug) in prev_rounds_lst:
     for prev_match in get_matches(prev_event_slug, prev_round_slug):
-      prev_winners.append(get_winning_song(prev_match.id))  
+      prev_winners.append(get_winning_song(prev_match.id))
 
-  # Attempt to populate each match with a winner from our list of winners.
-  # Round-robin gives each match one song, then each match a second song, and so on.
-  # In theory the rounds and matches-per-round are set up so that
-  # len(list of winners) is exactly equal to the number of songs needed in this round.
-  # TODO: Avoid self vs self match-ups. Use a dict of some sort?
-  # Theory: Using an incrementing i here instead of a seed results in March Madness.
-  # Maybe? Not super sure.
-  random.seed(100)
-  while len(prev_winners) > 0:
-    for new_match in matches:
-      i = random.randint(0, len(prev_winners) - 1)
-      new_song_id = prev_winners[i].id
-      new_match_id = new_match.id
-
-      new_candidate = Candidate(song_id=new_song_id, match_id=new_match_id)
+  # Match assignment is a list of lists of songs.
+  # Port that into the db by creating Candidate objects.
+  match_assignments = shuffle_winners(prev_winners, len(matches))
+  for i, new_match in enumerate(matches):
+    for new_song in match_assignments[i]:
+      new_candidate = Candidate(song_id=new_song.id, match_id=new_match.id)
       db.session.add(new_candidate)
-
-      prev_winners.pop(i)
+      db.session.commit()
 
   db.session.commit()
 
