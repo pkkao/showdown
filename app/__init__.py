@@ -1,6 +1,7 @@
 from flask import Flask
 from config import Config
 from flask_sqlalchemy import SQLAlchemy
+import sqlalchemy as sa
 from sqlalchemy import MetaData
 from flask_migrate import Migrate
 from flask_login import LoginManager
@@ -79,6 +80,9 @@ class HostSongModelView(HostModelView):
     'pick_time': {'disabled': True},
     'pick_num': {'disabled': True},
   }
+
+  def get_query(self):
+     return self.session.query(Song).filter(Song.event_id == 2)
 
 class AdminEventModelView(AdminModelView):
   column_editable_list = ['pick_deadline']
