@@ -1,0 +1,21 @@
+[project]
+name = "showdown"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "alembic==1.19.1",
+    "flask==3.1.3",
+    "flask-admin==2.2.0",
+    "flask-login==0.6.3",
+    "flask-migrate==4.1.0",
+    "flask-sqlalchemy==3.1.1",
+    "flask-wtf==1.3.0",
+    "markupsafe==3.0.3",
+    "pytz==2026.3.post1",
+    "sqlalchemy==2.0.52",
+    "werkzeug==3.1.8",
+    "wonderwords==3.0.1",
+    "wtforms==3.2.2",
+]
